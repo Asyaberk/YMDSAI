@@ -3,4 +3,3 @@ node_modules/
 __pycache__/
 .DS_Store
 .env
-experiment_outputs/

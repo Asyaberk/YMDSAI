@@ -1,20 +1,13 @@
-// Real types aligned with backend API responses
+export type UserRole = 'ADMIN' | 'USER';
 
-export interface PipelineResult {
-  pipeline: string;
-  pipeline_label: string;
-  pipeline_color: string;
-  model: string;
-  n: number;
-  accuracy: number | null;
-  recall_at_k: number | null;
-  mrr: number | null;
-  mean_pred_score: number | null;
-  mean_latency: number | null;
-  total_cost: number | null;
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  avatar?: string;
 }
 
-// Legacy types kept for pages that still use static data
 export interface Document {
   id: string;
   name: string;
@@ -23,6 +16,20 @@ export interface Document {
   articleCount: number;
   nonCompliantArticles: string[];
   uploadDate: string;
+}
+
+export interface RAGModel {
+  id: string;
+  name: string;
+  f1: number;
+  precision: number;
+  recall: number;
+  latency: number;
+  explainability: number;
+  category: 'Simple' | 'Medium' | 'Complex';
+  description: string;
+  pros: string[];
+  cons: string[];
 }
 
 export interface Article {

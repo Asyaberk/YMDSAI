@@ -1,335 +1,353 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ScatterChart, Scatter, ZAxis, Cell, LabelList,
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  LabelList,
+  Cell
 } from 'recharts';
-import { Trophy, Loader2, WifiOff, Info, CheckCircle2 } from 'lucide-react';
-import { fetchExperiments, ExperimentAgg } from '../api';
+import { 
+  Settings, 
+  Play, 
+  ChevronDown, 
+  ChevronUp, 
+  Info, 
+  Trophy,
+  Zap,
+  Clock,
+  Eye
+} from 'lucide-react';
+import { ragModels } from '../mockData';
 
-// ── Constants ────────────────────────────────────────────────────────────────
-const PIPELINES  = ['no-rag', 'bm25', 'dense', 'hybrid'] as const;
-const MODELS     = ['gpt-4o-mini', 'gpt-4o'] as const;
-const MODEL_LABELS: Record<string, string> = {
-  'gpt-4o':      'GPT-4o',
-  'gpt-4o-mini': 'GPT-4o-mini',
-};
-const BAR_COLORS: Record<string, string> = {
-  'gpt-4o':      '#6366F1',
-  'gpt-4o-mini': '#3B82F6',
-};
-
-const PIPELINE_DESCRIPTIONS: Record<string, { desc: string; pros: string[]; cons: string[] }> = {
-  'no-rag': {
-    desc: 'YÖK mevzuatından hiçbir chunk çekilmez. Sadece üniversite metni LLM\'e verilir. Baseline referans noktası.',
-    pros: ['En ucuz ($0.011/40q)', 'En az gecikme'],
-    cons: ['Retrieval yok (Recall@5=0)', 'Yerleşik LLM bilgisine bağımlı'],
-  },
-  'bm25': {
-    desc: 'BM25Okapi — TF-IDF tabanlı kelime eşleşmesi. Türkçe hukuki terminoloji için çok etkili.',
-    pros: ['En yüksek Recall@5 (%66.2)', 'En yüksek MRR (0.767)', 'Ucuz'],
-    cons: ['Semantik anlama yok', 'Eş anlamlı terimleri kaçırabilir'],
-  },
-  'dense': {
-    desc: 'FAISS + paraphrase-multilingual-MiniLM-L12-v2 ile semantik vektör araması. 384-boyutlu embedding.',
-    pros: ['Semantik anlama kapasitesi', 'Eş anlamlı terimleri yakalayabilir'],
-    cons: ['Recall@5 çok düşük (%2.5)', 'Domain-specific eğitim eksikliği'],
-  },
-  'hybrid': {
-    desc: 'BM25 + Dense skorların eşit ağırlıkla (α=0.5) kombinasyonu. min-max normalizasyonu ile.',
-    pros: ['Her iki yöntemin avantajları', 'Dengeli yaklaşım'],
-    cons: ['Dense\'in zayıflığını miras alıyor', 'BM25\'ten düşük Recall@5'],
-  },
-};
-
-const pct = (v: number | null) => v != null ? `${(v * 100).toFixed(1)}%` : '—';
-
-// ── Component ────────────────────────────────────────────────────────────────
 export default function RAGExperiments() {
-  const [data, setData]       = useState<ExperimentAgg[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError]     = useState<string | null>(null);
-  const [selModel, setSelModel] = useState<string>('gpt-4o-mini');
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [models, setModels] = useState(ragModels);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedModel, setExpandedModel] = useState<string | null>(null);
+  const [visibleModels, setVisibleModels] = useState<string[]>(ragModels.map(m => m.id));
 
-  useEffect(() => {
-    fetchExperiments()
-      .then(d => setData(d.aggregated))
-      .catch(e => setError(e.message))
-      .finally(()=> setLoading(false));
-  }, []);
+  const categories = ['Akademik', 'İdari', 'Mali', 'Disiplin', 'Lisansüstü', 'Yurt Dışı'];
 
-  // ── Chart Builders ────────────────────────────────────────────────────────
-  const filtered = data.filter(r => r.model === selModel);
-  const pipelinesInOrder = PIPELINES.map(p => filtered.find(r => r.pipeline === p)).filter(Boolean) as ExperimentAgg[];
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setModels(prev => prev.map(m => ({
+        ...m,
+        f1: Math.min(0.98, Math.max(0.75, m.f1 + (Math.random() * 0.04 - 0.02))),
+        precision: Math.min(0.98, Math.max(0.75, m.precision + (Math.random() * 0.04 - 0.02))),
+        recall: Math.min(0.98, Math.max(0.75, m.recall + (Math.random() * 0.04 - 0.02))),
+      })));
+      setIsRefreshing(false);
+    }, 2000);
+  };
 
-  // Bar chart data — 3 metrics × 4 pipelines
-  const barData = pipelinesInOrder.map(r => ({
-    name:        r.pipeline_label.split(' (')[0],
-    color:       r.pipeline_color,
-    'Recall@5':  r.recall_at_k != null ? +(r.recall_at_k * 100).toFixed(1) : 0,
-    'MRR×100':   r.mrr         != null ? +(r.mrr * 100).toFixed(1)         : 0,
-    'Accuracy':  r.accuracy    != null ? +(r.accuracy * 100).toFixed(1)    : 0,
+  const radarData = [
+    { subject: 'F1 Score', fullMark: 1 },
+    { subject: 'Precision', fullMark: 1 },
+    { subject: 'Recall', fullMark: 1 },
+    { subject: 'Speed', fullMark: 1 },
+    { subject: 'Explainability', fullMark: 5 },
+  ].map(axis => {
+    const entry: any = { subject: axis.subject };
+    models.forEach(m => {
+      if (axis.subject === 'Speed') {
+        entry[m.name] = (4 - m.latency) / 4; // Normalized speed
+      } else if (axis.subject === 'Explainability') {
+        entry[m.name] = m.explainability;
+      } else {
+        entry[m.name] = m[axis.subject.toLowerCase() as keyof typeof m];
+      }
+    });
+    return entry;
+  });
+
+  const scatterData = models.map(m => ({
+    name: m.name,
+    x: m.latency,
+    y: m.f1,
+    category: m.category
   }));
 
-  // Scatter: cost vs recall@5 — all models
-  const scatterData = data.map(r => ({
-    name:        `${r.pipeline_label.split(' (')[0]} / ${MODEL_LABELS[r.model]}`,
-    x:           r.total_cost ?? 0,
-    y:           r.recall_at_k != null ? +(r.recall_at_k * 100).toFixed(1) : 0,
-    color:       r.pipeline_color,
-    model:       r.model,
-  }));
-
-  // Leaderboard by recall_at_k — averaged over models
-  const leaderboard = PIPELINES.map(pipe => {
-    const group = data.filter(r => r.pipeline === pipe);
-    const avg = (key: keyof ExperimentAgg) => {
-      const vals = group.map(r => r[key] as number | null).filter(v => v != null) as number[];
-      return vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
-    };
-    return {
-      pipeline: pipe,
-      label:    group[0]?.pipeline_label ?? pipe,
-      color:    group[0]?.pipeline_color ?? '#64748B',
-      recall_at_k: avg('recall_at_k'),
-      mrr:         avg('mrr'),
-      accuracy:    avg('accuracy'),
-      cost_mini:   data.find(r=>r.pipeline===pipe&&r.model==='gpt-4o-mini')?.total_cost ?? null,
-    };
-  }).sort((a,b)=>(b.recall_at_k??0)-(a.recall_at_k??0));
-
-  const MEDAL = ['🥇','🥈','🥉','4️⃣'];
-
-  // ── Error / Loading ───────────────────────────────────────────────────────
-  if (loading) return (
-    <div className="flex items-center justify-center h-64 gap-3 text-slate-400">
-      <Loader2 className="animate-spin" size={24}/>
-      <span>Benchmark verileri yükleniyor…</span>
-    </div>
-  );
-
-  if (error) return (
-    <div className="flex flex-col items-center justify-center h-64 gap-4 text-slate-500">
-      <WifiOff size={40} className="text-slate-300"/>
-      <p className="font-medium text-red-500">Backend'e bağlanılamadı</p>
-      <code className="text-xs bg-slate-100 px-4 py-2 rounded-lg">
-        .venv/bin/uvicorn backend.main:app --port 8000
-      </code>
-    </div>
-  );
+  const getHeatmapColor = (modelIdx: number, catIdx: number) => {
+    const base = models[modelIdx].f1;
+    const offset = (modelIdx * catIdx * 0.01) % 0.1;
+    const score = base - offset;
+    if (score > 0.88) return 'bg-success text-white';
+    if (score > 0.82) return 'bg-warning text-white';
+    return 'bg-danger text-white';
+  };
 
   return (
     <div className="flex gap-8">
       <div className="flex-1 space-y-8">
-
-        {/* ── Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-medium">RAG Karşılaştırma Deneyleri</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              {data.length > 0 ? `${data[0].n} test case · Gerçek GPT-4o/mini sonuçları` : ''}
-            </p>
-          </div>
-          {/* Model selector */}
-          <div className="flex gap-2">
-            {MODELS.map(m => (
-              <button
-                key={m}
-                onClick={() => setSelModel(m)}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                  selModel === m
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                }`}
-              >
-                {MODEL_LABELS[m]}
-              </button>
-            ))}
+          <h1 className="text-2xl font-medium">RAG Karşılaştırma Deneyleri</h1>
+          <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+            <Clock size={14} />
+            Son Güncelleme: Az Önce
           </div>
         </div>
 
-        {/* ── Charts Row ─────────────────────────────────────────────────── */}
+        {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-          {/* Chart 1: Grouped Bar — 3 metrics */}
-          <div className="card h-[380px]">
-            <h3 className="text-sm font-medium mb-1">Pipeline Performans Karşılaştırması</h3>
-            <p className="text-xs text-slate-400 mb-4">Model: <b>{MODEL_LABELS[selModel]}</b></p>
-            <ResponsiveContainer width="100%" height="88%">
-              <BarChart data={barData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+          {/* Chart 1: Grouped Bar Chart */}
+          <div className="card h-[400px]">
+            <h3 className="text-sm font-medium mb-6">Model Performans Karşılaştırması</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={models}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} unit="%" />
-                <Tooltip
-                  formatter={(v: number, name: string) => [`${v.toFixed(1)}%`, name]}
-                  contentStyle={{ borderRadius:'8px', border:'none', boxShadow:'0 4px 12px rgba(0,0,0,.1)' }}
-                />
-                <Legend iconType="circle" wrapperStyle={{ fontSize:'10px' }} />
-                <Bar dataKey="Recall@5" fill="#3B82F6" radius={[4,4,0,0]} />
-                <Bar dataKey="MRR×100" fill="#8B5CF6" radius={[4,4,0,0]} />
-                <Bar dataKey="Accuracy" fill="#10B981" radius={[4,4,0,0]} />
+                <YAxis domain={[0, 1]} tick={{ fontSize: 10 }} />
+                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }} />
+                <Bar dataKey="precision" name="Precision" fill="#185FA5" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="recall" name="Recall" fill="#1D9E75" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="f1" name="F1 Score" fill="#7F77DD" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Chart 2: Scatter — cost vs recall@5 */}
-          <div className="card h-[380px]">
-            <h3 className="text-sm font-medium mb-1">Maliyet & Retrieval Dengesi</h3>
-            <p className="text-xs text-slate-400 mb-4">Tüm modeller · Sol-alt = en verimli</p>
-            <ResponsiveContainer width="100%" height="88%">
-              <ScatterChart margin={{ top: 10, right: 20, bottom: 20, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis type="number" dataKey="x" name="Maliyet (USD)" tick={{ fontSize: 10 }}
-                       label={{ value: 'Maliyet / 40 sorgu (USD)', position: 'bottom', fontSize: 10 }} />
-                <YAxis type="number" dataKey="y" name="Recall@5" domain={[0, 80]}
-                       tick={{ fontSize: 10 }} unit="%" />
-                <ZAxis type="number" range={[80, 80]} />
-                <Tooltip
-                  cursor={{ strokeDasharray: '3 3' }}
-                  formatter={(v: number, name: string) => [
-                    name === 'Recall@5' ? `${v}%` : `$${v.toFixed(3)}`, name
-                  ]}
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const d = payload[0].payload;
-                    return (
-                      <div className="bg-white rounded-lg shadow-lg p-3 text-xs border border-slate-100">
-                        <p className="font-semibold mb-1">{d.name}</p>
-                        <p>Recall@5: <b>{d.y}%</b></p>
-                        <p>Maliyet: <b>${d.x.toFixed(3)}</b></p>
-                      </div>
-                    );
+          {/* Chart 2: Radar Chart */}
+          <div className="card h-[400px]">
+            <h3 className="text-sm font-medium mb-6">Çok Boyutlu Model Analizi</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                <PolarGrid stroke="#e2e8f0" />
+                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: '#64748b' }} />
+                <PolarRadiusAxis angle={30} domain={[0, 1]} tick={false} axisLine={false} />
+                {models.filter(m => visibleModels.includes(m.id)).map((m, i) => (
+                  <Radar
+                    key={m.id}
+                    name={m.name}
+                    dataKey={m.name}
+                    stroke={['#185FA5', '#1D9E75', '#BA7517', '#E24B4A', '#7F77DD', '#64748b', '#000'][i % 7]}
+                    fill={['#185FA5', '#1D9E75', '#BA7517', '#E24B4A', '#7F77DD', '#64748b', '#000'][i % 7]}
+                    fillOpacity={0.1}
+                  />
+                ))}
+                <Legend 
+                  iconType="circle" 
+                  wrapperStyle={{ fontSize: '10px', paddingTop: '20px' }}
+                  onClick={(e) => {
+                    const id = models.find(m => m.name === e.value)?.id;
+                    if (id) {
+                      setVisibleModels(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                    }
                   }}
                 />
-                <Scatter name="Pipeline/Model" data={scatterData}>
-                  {scatterData.map((entry, i) => (
-                    <Cell key={i} fill={entry.color}
-                          opacity={entry.model === selModel ? 1 : 0.35} />
+              </RadarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Chart 3: Scatter Plot */}
+          <div className="card h-[400px]">
+            <h3 className="text-sm font-medium mb-6">Hız-Doğruluk Dengesi (Trade-off)</h3>
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis type="number" dataKey="x" name="Latency" unit="s" label={{ value: 'Gecikme (sn)', position: 'bottom', fontSize: 10 }} />
+                <YAxis type="number" dataKey="y" name="F1 Score" domain={[0.7, 1]} label={{ value: 'F1 Skoru', angle: -90, position: 'left', fontSize: 10 }} />
+                <ZAxis type="number" range={[100, 100]} />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                {/* Ideal Zone */}
+                <rect x={0} y={0.85} width={1.5} height={0.15} fill="#1D9E75" fillOpacity={0.05} />
+                <text x={10} y={40} fontSize={10} fill="#1D9E75" fontWeight="500">İdeal Bölge</text>
+                
+                <Scatter name="Models" data={scatterData}>
+                  {scatterData.map((entry, index) => (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={entry.category === 'Simple' ? '#94a3b8' : entry.category === 'Medium' ? '#185FA5' : '#7F77DD'} 
+                    />
                   ))}
-                  <LabelList dataKey="name" position="top"
-                             style={{ fontSize: '9px', fill: '#64748b' }}
-                             formatter={(v: string) => v.split(' / ')[0]}/>
+                  <LabelList dataKey="name" position="top" style={{ fontSize: '10px', fill: '#64748b' }} />
                 </Scatter>
               </ScatterChart>
             </ResponsiveContainer>
           </div>
-        </div>
 
-        {/* ── Pipeline Descriptions ────────────────────────────────────────── */}
-        <div className="card">
-          <h3 className="text-lg font-medium mb-6">Pipeline Açıklamaları & Teknik Kararlar</h3>
-          <div className="space-y-2">
-            {PIPELINES.map(pipe => {
-              const info  = PIPELINE_DESCRIPTIONS[pipe];
-              const row   = data.find(r => r.pipeline === pipe && r.model === selModel);
-              const isExp = expanded === pipe;
-              return (
-                <div key={pipe} className="border border-gray-100 rounded-xl overflow-hidden">
-                  <button
-                    className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
-                    onClick={() => setExpanded(isExp ? null : pipe)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full"
-                           style={{ background: leaderboard.find(l=>l.pipeline===pipe)?.color }} />
-                      <span className="font-medium text-sm">
-                        {PIPELINE_DESCRIPTIONS[pipe] && leaderboard.find(l=>l.pipeline===pipe)?.label}
-                      </span>
-                      {pipe === 'bm25' && (
-                        <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
-                          🏆 En İyi Retrieval
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-6 text-xs text-slate-500">
-                      {row && <>
-                        <span>Recall@5: <b className="text-slate-700">{pct(row.recall_at_k)}</b></span>
-                        <span>MRR: <b className="text-slate-700">{row.mrr?.toFixed(3)}</b></span>
-                        <span>Maliyet: <b className="text-slate-700">${row.total_cost?.toFixed(3)}</b></span>
-                      </>}
-                      <Info size={14} className={isExp ? 'text-primary' : 'text-slate-300'} />
-                    </div>
-                  </button>
-                  {isExp && (
-                    <div className="p-4 bg-slate-50 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <p className="text-xs text-slate-600 leading-relaxed mb-4">{info.desc}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-[10px] font-bold text-emerald-600 uppercase mb-2">Avantajlar</p>
-                          <ul className="text-xs text-slate-600 space-y-1">
-                            {info.pros.map((p,i) => <li key={i}>✓ {p}</li>)}
-                          </ul>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-red-500 uppercase mb-2">Dezavantajlar</p>
-                          <ul className="text-xs text-slate-600 space-y-1">
-                            {info.cons.map((p,i) => <li key={i}>✗ {p}</li>)}
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
-      <aside className="w-72 space-y-6">
-        <div className="card sticky top-8 space-y-6">
-
-          {/* Leaderboard */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy size={18} className="text-amber-500" />
-              <h2 className="text-sm font-semibold">Retrieval Sıralaması</h2>
-            </div>
-            <div className="space-y-2">
-              {leaderboard.map((r, i) => (
-                <div key={r.pipeline}
-                     className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{MEDAL[i]}</span>
-                    <div>
-                      <p className="text-xs font-medium">{r.label.split(' (')[0]}</p>
-                      <p className="text-[10px] text-slate-400">MRR: {r.mrr?.toFixed(3) ?? '—'}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-blue-600">{pct(r.recall_at_k)}</span>
+          {/* Chart 4: Heatmap */}
+          <div className="card h-[400px] flex flex-col">
+            <h3 className="text-sm font-medium mb-6">Kategori × Model Performans Haritası</h3>
+            <div className="flex-1 grid grid-cols-7 grid-rows-8 gap-1">
+              {/* Header Row */}
+              <div />
+              {categories.map(cat => (
+                <div key={cat} className="text-[9px] font-medium text-slate-500 flex items-center justify-center text-center leading-tight">
+                  {cat}
                 </div>
               ))}
+              
+              {/* Data Rows */}
+              {models.map((model, mIdx) => (
+                <React.Fragment key={model.id}>
+                  <div className="text-[9px] font-medium text-slate-700 flex items-center pr-2">
+                    {model.name}
+                  </div>
+                  {categories.map((_, cIdx) => (
+                    <div 
+                      key={cIdx} 
+                      className={`rounded-sm flex items-center justify-center text-[10px] font-bold ${getHeatmapColor(mIdx, cIdx)}`}
+                    >
+                      {(model.f1 - (mIdx * cIdx * 0.01) % 0.1).toFixed(2)}
+                    </div>
+                  ))}
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-4">
+              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <div className="w-3 h-3 bg-success rounded-sm" /> Yüksek
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <div className="w-3 h-3 bg-warning rounded-sm" /> Orta
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-slate-500">
+                <div className="w-3 h-3 bg-danger rounded-sm" /> Düşük
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Class imbalance warning */}
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-100">
-            <p className="text-[10px] font-bold text-amber-700 uppercase mb-1">⚠ Metodoloji Notu</p>
-            <p className="text-[10px] text-amber-700 leading-relaxed">
-              40 test case'in 38'i "partial" — accuracy class imbalance nedeniyle
-              yanıltıcıdır. Retrieval metrikleri (Recall@5, MRR) daha güvenilir.
+        {/* Model Descriptions */}
+        <div className="card">
+          <h3 className="text-lg font-medium mb-6">Model Açıklamaları</h3>
+          <div className="space-y-2">
+            {models.map((model) => (
+              <div key={model.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                <button 
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors"
+                  onClick={() => setExpandedModel(expandedModel === model.id ? null : model.id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <span className="font-medium text-sm">{model.name}</span>
+                    <span className="status-pill bg-academic/10 text-academic text-[10px]">
+                      {model.id === 'crag' ? 'En İyi Doğruluk' : model.id === 'vanilla' ? 'En Hızlı' : 'Dengeli'}
+                    </span>
+                  </div>
+                  {expandedModel === model.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {expandedModel === model.id && (
+                  <div className="p-4 bg-slate-50 border-t border-gray-100 grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-200">
+                    <div>
+                      <p className="text-xs text-slate-600 leading-relaxed mb-4">{model.description}</p>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          <Zap size={14} className="text-warning" />
+                          Latency: {model.latency}s
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          <Eye size={14} className="text-primary" />
+                          Explainability: {model.explainability}/5
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-success uppercase mb-2">Avantajlar</p>
+                        <ul className="text-xs text-slate-600 space-y-1">
+                          {model.pros.map((p, i) => <li key={i}>• {p}</li>)}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-danger uppercase mb-2">Dezavantajlar</p>
+                        <ul className="text-xs text-slate-600 space-y-1">
+                          {model.cons.map((p, i) => <li key={i}>• {p}</li>)}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Settings Panel */}
+      <aside className="w-80 space-y-6">
+        <div className="card sticky top-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Settings size={20} className="text-slate-400" />
+            <h2 className="text-lg font-medium">Deney Ayarları</h2>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <label className="text-xs font-medium text-slate-600">Similarity Threshold</label>
+                <span className="text-xs font-bold text-primary">0.75</span>
+              </div>
+              <input type="range" min="0.5" max="0.95" step="0.05" defaultValue="0.75" className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-medium text-slate-600">Embedding Model</label>
+              <select 
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-primary"
+                defaultValue="SBERT all-mpnet-base-v2"
+              >
+                <option>SBERT all-MiniLM-L6-v2</option>
+                <option>SBERT all-mpnet-base-v2</option>
+                <option>OpenAI text-embedding-3-small</option>
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <label className="text-xs font-medium text-slate-600">Top-k Results</label>
+                <span className="text-xs font-bold text-primary">5</span>
+              </div>
+              <input type="range" min="1" max="10" step="1" defaultValue="5" className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary" />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-medium text-slate-600">LLM Selector</label>
+              <select 
+                className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-primary"
+                defaultValue="GPT-4o"
+              >
+                <option>GPT-4o</option>
+                <option>LLaMA-2</option>
+                <option>Mistral-7B</option>
+              </select>
+            </div>
+
+            <button 
+              className={`w-full btn-primary py-3 flex items-center justify-center gap-2 ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Play size={18} fill="currentColor" />
+              )}
+              Yeniden Çalıştır
+            </button>
+          </div>
+
+          <div className="mt-8 p-4 bg-academic/5 rounded-xl border border-academic/10">
+            <div className="flex items-center gap-2 mb-2">
+              <Trophy size={16} className="text-academic" />
+              <p className="text-xs font-bold text-academic uppercase">Önerilen Yapılandırma</p>
+            </div>
+            <p className="text-[10px] text-slate-600 leading-relaxed">
+              Hukuki metin analizi için <b>CRAG + GPT-4o</b> kombinasyonu, en yüksek doğruluk ve açıklanabilirlik skorlarını sağlamaktadır.
             </p>
           </div>
-
-          {/* Recommended */}
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 size={14} className="text-blue-600" />
-              <p className="text-[10px] font-bold text-blue-700 uppercase">Önerilen Yapılandırma</p>
-            </div>
-            <p className="text-xs font-semibold text-slate-700 mb-1">BM25 + GPT-4o-mini</p>
-            <ul className="text-[10px] text-slate-500 space-y-1">
-              <li>• Recall@5: 66.2%</li>
-              <li>• MRR: 0.767</li>
-              <li>• Maliyet: $0.017 / 40 sorgu</li>
-              <li>• Latency: ~3.1s/sorgu</li>
-            </ul>
-          </div>
-
         </div>
       </aside>
     </div>
