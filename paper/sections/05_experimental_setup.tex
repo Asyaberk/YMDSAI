@@ -1,0 +1,19 @@
+\subsection{Implementation Details}
+
+ComplianceAI is implemented in Python 3.14. The backend uses FastAPI for the REST API layer, \texttt{rank\_bm25} for sparse retrieval, \texttt{faiss-cpu} for dense vector search, \texttt{pypdf} for PDF text extraction, and the OpenAI Python SDK for LLM calls. The frontend is built with React. All experiments were run on a MacBook Pro (Apple M-series CPU, 16 GB RAM). No GPU was used; all LLM inference was via the OpenAI API.
+
+\subsection{Knowledge Base}
+
+The regulatory knowledge base consists of nine PDF documents obtained from the YÖK website and Istanbul Bilgi University's official resources. After chunking (350 words, 59-word overlap), the corpus contains 248 chunks. The dense index uses OpenAI's \texttt{text-embedding-3-small} model with 384-dimensional projections, which was chosen for its strong multilingual performance and low cost relative to larger embedding models.
+
+\subsection{LLM Configuration}
+
+Both GPT-4o (\texttt{gpt-4o-2024-08-06}) and GPT-4o-mini (\texttt{gpt-4o-mini-2024-07-18}) were evaluated. Temperature was set to 0.0 for all evaluation calls to ensure reproducible outputs. The system prompt instructs the model to return a valid JSON object with four fields: compliance score (0--100), label, explanation, and a list of referenced articles. A response format constraint (\texttt{response\_format: \{type: "json\_object"\}}) was applied to prevent malformed outputs.
+
+\subsection{Benchmark Dataset}
+
+The RAG-aware test set (40 cases, 13/14/13 class split) was constructed as described in Section~\ref{sec:methodology}. Dataset generation cost approximately \$0.80 in API fees. All test cases, gold labels, and source passages are included in the accompanying repository.
+
+\subsection{Reproducibility}
+
+All experiments are fully reproducible using the provided scripts. The benchmark script (\texttt{run\_benchmark\_balanced.py}) accepts a seed argument and logs all LLM outputs to a CSV file. The ablation scripts (\texttt{ablation\_bm25\_fast.py}) similarly log all intermediate results.

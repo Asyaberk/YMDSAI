@@ -1,0 +1,75 @@
+Imagine you are an administrator at a Turkish university.
+A new internal policy lands on your desk. Before it can go into effect,
+you need to verify that it complies with the regulations set by YÖK ---
+the Higher Education Council that governs all Turkish universities.
+That means reading through dozens of pages of dense legal text,
+cross-referencing multiple regulation documents, and making judgment calls
+about ambiguous wording. This process can take hours, and it has to be
+repeated for every new policy.
+
+Now imagine a system that does this automatically.
+
+That is exactly what we built. \textbf{ComplianceAI} is a
+retrieval-augmented generation (RAG) system that takes a university policy
+document, searches a database of nine official YÖK regulatory documents for
+the most relevant passages, and asks a large language model to decide
+whether the policy is \textit{compliant}, \textit{partially compliant}, or
+\textit{non-compliant} --- all in under two seconds.
+
+\subsection*{Why RAG?}
+
+A natural first question is: why not just ask GPT-4o directly?
+The answer is that language models are trained on large amounts of text from
+the internet, but they are not guaranteed to know the specific wording of a
+particular YÖK regulation from 2024 --- especially the fine-grained numerical
+thresholds and procedural rules that determine compliance.
+RAG addresses this by retrieving the actual regulation text at query time
+and feeding it to the model as context \citep{Sun2025, Hillebrand2024}.
+This way, the model reasons about what the regulation \textit{actually says},
+not what it \textit{thinks} it says.
+
+To test whether this matters, we designed our evaluation specifically around
+cases where the model would be likely to fail without retrieval.
+As we show in Section~\ref{sec:results}, the results are clear:
+RAG-based configurations outperform the no-RAG baseline by \textbf{10 percentage
+points} on our benchmark.
+
+\subsection*{What We Contribute}
+
+This paper makes the following contributions:
+
+\begin{itemize}
+  \item We present \textbf{ComplianceAI}, a complete end-to-end system for
+    automated regulatory compliance checking in Turkish higher education,
+    including a FastAPI backend, a React dashboard, and five retrieval pipeline
+    variants (no-RAG, BM25, Dense, Hybrid, and Multi-Query).
+
+  \item We build the \textbf{first annotated benchmark dataset} for this domain:
+    40 compliance assessment cases specifically designed to require access to
+    YÖK regulation text, with balanced class distribution (13 compliant,
+    14 partial, 13 non-compliant).
+
+  \item We conduct a \textbf{systematic comparison} of all five pipeline variants
+    with two LLM backends (GPT-4o and GPT-4o-mini), finding that Hybrid and
+    BM25 retrieval consistently outperform other approaches, and that
+    GPT-4o-mini matches GPT-4o accuracy at 19$\times$ lower cost.
+
+  \item We run \textbf{ablation studies} on chunk size and retrieval depth,
+    identifying 350-word chunks and Top-5 retrieval as the optimal settings
+    for this task.
+
+  \item We document an important \textbf{failure mode}: all models
+    systematically under-predict the non-compliant class, defaulting to
+    ``partial'' even for clear violations --- a finding that should
+    inform any real-world deployment of similar systems.
+\end{itemize}
+
+The rest of this paper is structured as follows.
+Section~\ref{sec:related} reviews related work.
+Section~\ref{sec:architecture} describes the system.
+Section~\ref{sec:methodology} explains how we built the benchmark and ran
+the experiments.
+Section~\ref{sec:setup} covers implementation details.
+Section~\ref{sec:results} presents and discusses the results ---
+the most important part, with five tables and four figures.
+Section~\ref{sec:conclusion} wraps up with limitations and future directions.

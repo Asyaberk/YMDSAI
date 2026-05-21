@@ -1,0 +1,33 @@
+Checking whether documents comply with regulations is a well-studied problem in natural language processing, but most of the existing work focuses on financial regulations, legal contracts, or software requirements rather than higher education policy. This section covers the areas most relevant to our work: automated compliance checking, legal document understanding, and retrieval-augmented generation.
+
+\subsection{Automated Compliance Checking}
+
+Early work on automated compliance checking used rule-based or keyword-matching systems that required significant manual engineering for each new regulation domain. More recently, machine learning approaches — and especially large language models — have made it possible to handle the ambiguity and variation in natural language regulations without hard-coded rules.
+
+\citet{Sun2025} proposed a compliance checking framework specifically built on RAG, where relevant regulation passages are retrieved and provided to the model as grounding context. Their work is the closest in spirit to ours: they show that retrieval significantly improves compliance classification performance compared to a direct LLM approach. We build on this idea and extend it to the Turkish higher education domain, which has its own linguistic and structural challenges.
+
+\citet{Abualhaija2022} tackled compliance checking from a requirements engineering perspective, using automated question answering to help analysts understand regulatory requirements across multiple documents. Their approach highlighted the importance of structured document representations and precise retrieval, which informed our choice to maintain paragraph-level chunks rather than full-document representations.
+
+\citet{Masoudifard2024} explored graph-based retrieval for compliance checking, combining knowledge graphs with prompt engineering to improve traceability between requirements and regulations. While their approach requires richer document structure than raw text, their findings on multi-hop reasoning align with our observation that retrieving context from multiple regulation passages is often necessary for partial compliance cases.
+
+\subsection{Legal and Regulatory Document Understanding}
+
+Several works have addressed the broader challenge of understanding legal and regulatory text with NLP. \citet{Shinde2025} reviewed NLP methods for legal document understanding, noting that domain-specific tokenization and context-aware models are essential for handling legal language, which tends to be dense, formal, and full of cross-references. \citet{Singh2024} similarly demonstrated that standard NLP pipelines need adaptation for legal text analysis due to the specialized vocabulary.
+
+\citet{Nithya2024} and \citet{Deshpande2024} both examined AI-driven approaches to legal automation more broadly. Both papers noted that while language models can handle many routine compliance tasks, edge cases involving ambiguous or conflicting regulations remain difficult and require human oversight. Our findings echo this: all of our models struggle with non-compliant cases, often defaulting to a more conservative \textit{partial} label.
+
+\citet{Fazlija2024} implemented financial regulations using LLMs and observed similar classification behavior, where models tend to hedge rather than make definitive compliance judgments. Our work corroborates this finding in a different domain.
+
+\subsection{Retrieval-Augmented Generation}
+
+RAG systems address a fundamental limitation of language models: their knowledge is frozen at training time and may not include specific, up-to-date regulatory text \citep{Hillebrand2024}. By combining a retrieval component with a generation component, RAG allows the model to reason about documents it has never explicitly seen during training.
+
+\citet{Hillebrand2024} demonstrated a RAG chatbot for regulatory compliance in an industrial quality assurance context, finding that hybrid retrieval — combining sparse and dense methods — improves coverage compared to either method alone. This motivated our inclusion of a hybrid pipeline in our evaluation.
+
+\citet{Li2025} applied RAG combined with code generation for financial compliance checking, highlighting the value of structured outputs in compliance tasks. Their work reinforced our choice to prompt for JSON-structured compliance verdicts rather than free-form text.
+
+\citet{Zadenoori2025} conducted a systematic literature review of LLMs in requirements engineering, noting that while LLMs show strong performance on textual reasoning tasks, domain grounding through retrieval remains an open challenge. Our results contribute empirical data points to this ongoing discussion.
+
+\subsection{Positioning of This Work}
+
+To our knowledge, ComplianceAI is the first RAG-based compliance checking system designed specifically for Turkish higher education regulations. Compared to the financial and legal compliance systems reviewed above, our domain presents unique challenges: regulatory text is in Turkish, covers a broad range of administrative topics, and involves frequent cross-references between different YÖK directives. We contribute (1) a working end-to-end RAG compliance system, (2) the first annotated benchmark dataset for this domain, and (3) a systematic comparison of five retrieval pipeline variants with two LLM backends.
