@@ -86,6 +86,7 @@ class ChatMessageModel(Base):
 
     id         = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id    = Column(String, ForeignKey("users.id"), nullable=True)
+    session_id = Column(String, nullable=True)   # groups messages into conversations
     question   = Column(Text, nullable=False)
     answer     = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

@@ -344,27 +344,29 @@ export default function Landing() {
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Kullanıcı Türü</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button 
-                        type="button"
-                        onClick={() => setFormData({...formData, role: 'USER'})}
-                        className={`py-3 rounded-xl border text-xs font-bold transition-all ${formData.role === 'USER' ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
-                        id="role-user"
-                      >
-                        Birim Üyesi
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => setFormData({...formData, role: 'ADMIN'})}
-                        className={`py-3 rounded-xl border text-xs font-bold transition-all ${formData.role === 'ADMIN' ? 'bg-academic border-academic text-white shadow-lg shadow-academic/20' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
-                        id="role-admin"
-                      >
-                        Yönetici
-                      </button>
+                  {authMode === 'register' && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Kullanıcı Türü</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button 
+                          type="button"
+                          onClick={() => setFormData({...formData, role: 'USER'})}
+                          className={`py-3 rounded-xl border text-xs font-bold transition-all ${formData.role === 'USER' ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
+                          id="role-user"
+                        >
+                          Birim Üyesi
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => setFormData({...formData, role: 'ADMIN'})}
+                          className={`py-3 rounded-xl border text-xs font-bold transition-all ${formData.role === 'ADMIN' ? 'bg-academic border-academic text-white shadow-lg shadow-academic/20' : 'bg-slate-50 border-slate-100 text-slate-500'}`}
+                          id="role-admin"
+                        >
+                          Yönetici
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <button 
                     type="submit"

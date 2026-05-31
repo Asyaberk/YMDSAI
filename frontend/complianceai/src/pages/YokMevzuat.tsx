@@ -66,7 +66,7 @@ export default function YokMevzuat() {
   const [activeTab, setActiveTab] = useState<string>('Tümü');
   const [error, setError]         = useState<string | null>(null);
 
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('ca_token');
 
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) setRefreshing(true);

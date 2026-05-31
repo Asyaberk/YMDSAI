@@ -134,13 +134,22 @@ def _detect_category(filename: str, text: str) -> str:
 
 
 @router.get("/documents", response_model=List[schemas.DocumentSchema])
-def get_documents(db: Session = Depends(get_db), _=Depends(_require_user)):
-    return db.query(domain.DocumentModel).order_by(domain.DocumentModel.upload_date.desc()).all()
+def get_documents(db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    """Return only documents belonging to the authenticated user."""
+    return (
+        db.query(domain.DocumentModel)
+        .filter(domain.DocumentModel.user_id == current_user.id)
+        .order_by(domain.DocumentModel.upload_date.desc())
+        .all()
+    )
 
 
 @router.get("/documents/{doc_id}", response_model=schemas.DocumentDetailSchema)
-def get_document(doc_id: str, db: Session = Depends(get_db), _=Depends(_require_user)):
-    doc = db.query(domain.DocumentModel).filter(domain.DocumentModel.id == doc_id).first()
+def get_document(doc_id: str, db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    doc = db.query(domain.DocumentModel).filter(
+        domain.DocumentModel.id == doc_id,
+        domain.DocumentModel.user_id == current_user.id,
+    ).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Belge bulunamadı")
     return doc
@@ -164,16 +173,39 @@ def get_document_pdf(doc_id: str, db: Session = Depends(get_db)):
     )
 
 
+@router.delete("/documents/{doc_id}", status_code=200)
+def delete_document(doc_id: str, db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    """Delete a document owned by the current user."""
+    doc = db.query(domain.DocumentModel).filter(
+        domain.DocumentModel.id == doc_id,
+        domain.DocumentModel.user_id == current_user.id,
+    ).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Belge bulunamadı")
+
+    # Delete uploaded PDF from disk
+    pdf_path = UPLOADS_DIR / f"{doc_id}.pdf"
+    if pdf_path.exists():
+        pdf_path.unlink()
+
+    db.delete(doc)
+    db.commit()
+    return {"ok": True, "deleted_id": doc_id}
+
+
 # ── Dashboard ────────────────────────────────────────────────────────────────
 
 @router.get("/dashboard/metrics")
-def get_metrics(db: Session = Depends(get_db), _=Depends(_require_user)):
-    total       = db.query(domain.DocumentModel).count()
-    compliant   = db.query(domain.DocumentModel).filter(domain.DocumentModel.status == "Uyumlu").count()
-    partial     = db.query(domain.DocumentModel).filter(domain.DocumentModel.status == "Kısmen Uyumlu").count()
-    non_compl   = db.query(domain.DocumentModel).filter(domain.DocumentModel.status == "Uyumsuz").count()
+def get_metrics(db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    uid = current_user.id
+    base_q = db.query(domain.DocumentModel).filter(domain.DocumentModel.user_id == uid)
 
-    recent = db.query(domain.DocumentModel).order_by(domain.DocumentModel.upload_date.desc()).limit(5).all()
+    total     = base_q.count()
+    compliant = base_q.filter(domain.DocumentModel.status == "Uyumlu").count()
+    partial   = base_q.filter(domain.DocumentModel.status == "Kısmen Uyumlu").count()
+    non_compl = base_q.filter(domain.DocumentModel.status == "Uyumsuz").count()
+
+    recent = base_q.order_by(domain.DocumentModel.upload_date.desc()).limit(5).all()
 
     from sqlalchemy import extract
     months_tr = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran",
@@ -183,7 +215,7 @@ def get_metrics(db: Session = Depends(get_db), _=Depends(_require_user)):
     for i in range(5, -1, -1):
         m = (now.month - i - 1) % 12 + 1
         y = now.year if now.month - i > 0 else now.year - 1
-        docs_m = db.query(domain.DocumentModel).filter(
+        docs_m = base_q.filter(
             extract("month", domain.DocumentModel.upload_date) == m,
             extract("year",  domain.DocumentModel.upload_date) == y,
         ).all()
@@ -197,6 +229,7 @@ def get_metrics(db: Session = Depends(get_db), _=Depends(_require_user)):
 
     cats = db.query(domain.DocumentModel.category,
                     func.avg(domain.DocumentModel.compliance_score)
+                    ).filter(domain.DocumentModel.user_id == uid
                     ).group_by(domain.DocumentModel.category).all()
     category_scores = [{"name": c, "score": round(s or 0)} for c, s in cats] or [
         {"name": "Henüz veri yok", "score": 0}
@@ -331,37 +364,154 @@ def delete_user(user_id: str, db: Session = Depends(get_db), _=Depends(_require_
 
 class ChatRequest(BaseModel):
     question: str
+    session_id: str | None = None   # if None → auto-assigned to active session
 
 @router.post("/chat")
 def chat(body: ChatRequest, db: Session = Depends(get_db), current_user=Depends(_require_user)):
-    retrieved = _retrieve_bm25(body.question, k=5)
+    retrieved = _retrieve_bm25(body.question, k=7)
     context   = _format_chunks(retrieved)
 
-    system = (
-        "Sen Türk yükseköğretim mevzuatı konusunda uzman bir yapay zeka asistansısın. "
-        "Sana verilen YÖK mevzuat parçalarına dayanarak soruyu Türkçe olarak yanıtla. "
-        "Hangi mevzuat maddesinden alıntı yaptığını belirt. Kısa ve net ol."
-    )
-    user_msg = f"Mevzuat:\n{context[:3000]}\n\nSoru: {body.question}"
+    # ── Konu dışı soru tespiti (basit keyword guard) ─────────────────────────
+    yok_keywords = [
+        'yök', 'yükseköğretim', 'üniversite', 'öğrenci', 'lisans', 'lisansüstü',
+        'doktora', 'yüksek lisans', 'tez', 'diploma', 'akademik', 'öğretim',
+        'madde', 'kanun', 'yönetmelik', 'mevzuat', 'hukuk', 'disiplin',
+        'kayıt', 'mezuniyet', 'ders', 'kredi', 'sınav', 'burs', 'staj',
+        'yatay geçiş', 'çift anadal', 'yan dal', 'enstitü', 'fakülte',
+        'senato', 'rektör', 'dekan', 'öğretim üyesi', 'personel', 'idari',
+    ]
+    q_lower = body.question.lower()
+    is_on_topic = any(kw in q_lower for kw in yok_keywords)
+
+    if not is_on_topic:
+        off_topic_answer = (
+            "Bu soru Türk yükseköğretim mevzuatı kapsamında değil. "
+            "Ben yalnızca YÖK kanunları, yönetmelikler, üniversite mevzuatı ve "
+            "öğrenci/personel hakları gibi konularda bilgi verebilirim. \n\n"
+            "Lütfen sorunuzu bu konularla ilgili olacak şekilde yeniden sorunuz. "
+            "Örneğin: 'Azami öğrenim süresi nedir?', 'Yatay geçiş şartları nelerdir?' gibi."
+        )
+        db.add(domain.ChatMessageModel(
+            user_id=current_user.id,
+            session_id=body.session_id,
+            question=body.question,
+            answer=off_topic_answer,
+        ))
+        db.commit()
+        return {"answer": off_topic_answer, "sources": [], "session_id": body.session_id}
+
+    system = """Sen Türk yükseköğretim hukuku alanında uzman, deneyimli bir akademik hukukçusun.
+Görevin: Yalnızca YÖK mevzuatı, Türk yükseköğretim kanunları, üniversite yönetmelikleri ve öğrenci/personel hakları hakkında sorulara cevap vermek.
+
+KESİN KURAL: Sorulan konu yükseköğretim mevzuatıyla ilgili değilse (ör. yazılım, tarih, fen bilimleri, günlük yaşam vs.) 
+cevap verme. Bunun yerine şunu söyle: "Bu konu YÖK mevzuatı kapsamında değildir."
+
+YANIT FORMATIN:
+
+1. **Hukuki Dayanak:** Soruyla ilgili kanun veya yönetmeliği tam adı ve madde numarasıyla belirt.
+   Örnek: "2547 sayılı Yükseköğretim Kanunu'nun 44. maddesi uyarınca..."
+
+2. **Açıklama:** Maddenin ne anlama geldiğini, hem hukuki hem pratik açıdan açıkla.
+   Bir öğrenciye ya da üniversite yöneticisine anlatır gibi konuş; teknik dili sadeleştir.
+
+3. **Önemli İstisnalar / Dikkat Edilecek Hususlar:** Maddenin uygulanmadığı durumları veya özel şartları belirt.
+
+4. **Sonuç ve Öneri:** Soruyu net bir sonuçla bitir. Ne yapılması gerektiğini tavsiye et.
+
+KURALLAR:
+- Hangi kanun/yönetmelik maddesinden alıntı yaptığını açıkça belirt (kanun numarası + madde numarası).
+- Sadece verilen mevzuat metinlerine dayan; olmayan bilgileri uydurma.
+- Mevzuat yeterli değilse açıkça belirt.
+- Türkçe yaz, profesyonel ama anlaşılır bir dil kullan.
+- En az 3 paragraf yaz; yüzeysel kalma."""
+
+    user_msg = f"Mevzuat Metinleri:\n{context[:4000]}\n\nSoru: {body.question}"
 
     resp = _oa_client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "system", "content": system}, {"role": "user", "content": user_msg}],
-        temperature=0.3,
-        max_tokens=600,
+        temperature=0.4,
+        max_tokens=1200,
     )
     answer  = resp.choices[0].message.content
-    sources = list({c.get("source", "") for c in retrieved if c.get("source")})
+    sources = [
+        {"name": c.get("source", ""), "text": c.get("text", "")[:200], "score": round(c.get("score", 0), 3)}
+        for c in retrieved if c.get("source")
+    ]
+    # Deduplicate by source name
+    seen: set = set()
+    unique_sources = []
+    for s in sources:
+        if s["name"] not in seen:
+            seen.add(s["name"])
+            unique_sources.append(s)
 
     db.add(domain.ChatMessageModel(
         user_id=current_user.id,
+        session_id=body.session_id,
         question=body.question,
         answer=answer,
     ))
     db.commit()
 
-    return {"answer": answer, "sources": sources}
+    return {"answer": answer, "sources": unique_sources, "session_id": body.session_id}
 
+
+@router.get("/chat/sessions")
+def list_chat_sessions(db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    """Return all distinct sessions for the current user, newest first."""
+    from sqlalchemy import func
+    # Get the first message of each session to use as title
+    rows = db.query(domain.ChatMessageModel)\
+             .filter(domain.ChatMessageModel.user_id == current_user.id)\
+             .order_by(domain.ChatMessageModel.created_at.asc()).all()
+
+    sessions: dict = {}  # session_id -> {title, last_at, count}
+    for m in rows:
+        sid = m.session_id or "default"
+        if sid not in sessions:
+            sessions[sid] = {
+                "session_id": sid,
+                "title": m.question[:60] + ("..." if len(m.question) > 60 else ""),
+                "last_at": m.created_at.isoformat(),
+                "count": 0,
+            }
+        sessions[sid]["last_at"] = m.created_at.isoformat()
+        sessions[sid]["count"]  += 1
+
+    return sorted(sessions.values(), key=lambda x: x["last_at"], reverse=True)
+
+
+@router.post("/chat/sessions")
+def create_chat_session(current_user=Depends(_require_user)):
+    """Generate a new session ID for the client to use."""
+    import uuid as _uuid
+    return {"session_id": str(_uuid.uuid4())}
+
+
+@router.get("/chat/sessions/{session_id}")
+def get_chat_session(session_id: str, db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    """Return all messages belonging to the given session."""
+    msgs = db.query(domain.ChatMessageModel)\
+             .filter(
+                 domain.ChatMessageModel.user_id == current_user.id,
+                 domain.ChatMessageModel.session_id == session_id,
+             )\
+             .order_by(domain.ChatMessageModel.created_at.asc()).all()
+    return [{"question": m.question, "answer": m.answer, "createdAt": m.created_at.isoformat()}
+            for m in msgs]
+
+
+@router.delete("/chat/sessions/{session_id}")
+def delete_chat_session(session_id: str, db: Session = Depends(get_db), current_user=Depends(_require_user)):
+    """Delete all messages in a session."""
+    db.query(domain.ChatMessageModel)\
+      .filter(
+          domain.ChatMessageModel.user_id == current_user.id,
+          domain.ChatMessageModel.session_id == session_id,
+      ).delete(synchronize_session=False)
+    db.commit()
+    return {"ok": True}
 
 @router.get("/chat/history")
 def chat_history(db: Session = Depends(get_db), current_user=Depends(_require_user)):

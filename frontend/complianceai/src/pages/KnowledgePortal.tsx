@@ -1,186 +1,425 @@
-import React, { useState } from 'react';
-import { Search, Send, ThumbsUp, ThumbsDown, ExternalLink, Clock, Bot, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Send, Bot, User, ExternalLink, Loader2,
+  Scale, BookOpen, Sparkles, Clock,
+  Plus, Trash2, MessageSquare, ChevronLeft
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { yokRefToUrl, yokSourceLabel } from '../lib/yokRef';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Source { name: string; text: string; score: number; }
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Source[];
+  timestamp: Date;
+  isStreaming?: boolean;
+}
+
+interface ChatSession {
+  session_id: string;
+  title: string;
+  last_at: string;
+  count: number;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8001';
+
+function authHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${localStorage.getItem('ca_token') ?? ''}`,
+  };
+}
+
+const SUGGESTIONS = [
+  "Yatay geçiş için şartlar ve kontenjanlar nelerdir?",
+  "Azami öğrenim süresi dolan öğrencinin hakları nelerdir?",
+  "Lisansüstü tez savunması için gerekli şartlar nelerdir?",
+  "Çift anadal programına kabul koşulları nelerdir?",
+  "Disiplin cezası kararlarına nasıl itiraz edilir?",
+  "Kayıt dondurma hangi hallerde mümkündür?",
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function FormattedAnswer({ text }: { text: string }) {
+  return (
+    <div className="text-sm leading-relaxed text-slate-700 space-y-3">
+      {text.split('\n\n').map((para, i) => {
+        if (!para.trim()) return null;
+        const formatted = para.split(/(\*\*[^*]+\*\*)/g).map((chunk, j) => {
+          if (chunk.startsWith('**') && chunk.endsWith('**'))
+            return <strong key={j} className="font-bold text-slate-900">{chunk.slice(2, -2)}</strong>;
+          return <span key={j}>{chunk}</span>;
+        });
+        return <p key={i}>{formatted}</p>;
+      })}
+    </div>
+  );
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (mins < 1) return 'Şimdi';
+  if (mins < 60) return `${mins}dk önce`;
+  if (hours < 24) return `${hours}sa önce`;
+  return `${days}g önce`;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function KnowledgePortal() {
-  const [query, setQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const [showResult, setShowResult] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [history, setHistory] = useState([
-    { q: 'Yatay geçiş kontenjanları nasıl belirlenir?', a: 'Yükseköğretim kurumlarında yatay geçiş kontenjanları, her yıl YÖK tarafından belirlenen çerçeve yönetmelik uyarınca, ilgili üniversitenin senatosu tarafından karara bağlanır. Genellikle her bir diploma programı için o yılki öğrenci kontenjanının %15\'i ile %30\'u arasında bir oran belirlenir.' },
-    { q: 'Azami öğrenim süresi dolan öğrenciler ne yapmalı?', a: '2547 sayılı Kanun\'un 44. maddesi uyarınca, azami öğrenim süresini tamamlayan öğrencilere başarısız oldukları dersler için iki ek sınav hakkı verilir. Bu sınavlar sonunda mezuniyet için gereken ders sayısını beşe indirenlere üç yarıyıl ek süre tanınır.' }
-  ]);
+  const [sessions, setSessions]       = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [messages, setMessages]       = useState<Message[]>([]);
+  const [input, setInput]             = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [deletingId, setDeletingId]   = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const showNotification = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
-  };
+  // ── Fetch session list ──────────────────────────────────────────────────────
+  const loadSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/chat/sessions`, { headers: authHeaders() });
+      if (res.ok) setSessions(await res.json());
+    } finally { setLoadingSessions(false); }
+  }, []);
 
-  const handleSearch = (e?: React.FormEvent, customQuery?: string) => {
-    e?.preventDefault();
-    const finalQuery = customQuery || query;
-    if (!finalQuery.trim()) return;
-    
-    setIsSearching(true);
-    setShowResult(false);
-    
-    if (customQuery) setQuery(customQuery);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
 
-    setTimeout(() => {
-      setIsSearching(false);
-      setShowResult(true);
-      setHistory(prev => [...prev, { q: finalQuery, a: 'YÖK 2547 sayılı kanun ve ilgili yönetmelikler uyarınca, sorduğunuz konu hakkında üniversite senatosunun belirlediği esaslar geçerlisi. Mevcut mevzuat, akademik özgürlük ve idari özerklik çerçevesinde bu durumu düzenlemektedir.' }]);
-    }, 1500);
-  };
+  // ── Load messages for a session ─────────────────────────────────────────────
+  const loadSession = useCallback(async (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setMessages([]);
+    try {
+      const res = await fetch(`${BASE}/api/chat/sessions/${sessionId}`, { headers: authHeaders() });
+      if (!res.ok) return;
+      const data: Array<{ question: string; answer: string; createdAt: string }> = await res.json();
+      const msgs: Message[] = [];
+      data.forEach(m => {
+        msgs.push({ id: `u-${m.createdAt}`, role: 'user', content: m.question, timestamp: new Date(m.createdAt) });
+        msgs.push({ id: `a-${m.createdAt}`, role: 'assistant', content: m.answer, timestamp: new Date(m.createdAt) });
+      });
+      setMessages(msgs);
+    } catch { /* silent */ }
+  }, []);
 
-  const suggestions = [
-    "Yatay geçiş için şartlar nelerdir?",
-    "Azami öğrenim süresi kaç yıldır?",
-    "Disiplin cezaları nelerdir?",
-    "Doktora programına kabul koşulları?"
-  ];
+  // ── Create new session ──────────────────────────────────────────────────────
+  const newSession = useCallback(async () => {
+    const res = await fetch(`${BASE}/api/chat/sessions`, { method: 'POST', headers: authHeaders() });
+    const { session_id } = await res.json();
+    setActiveSessionId(session_id);
+    setMessages([]);
+    textareaRef.current?.focus();
+  }, []);
 
+  // ── Delete session ──────────────────────────────────────────────────────────
+  const deleteSession = useCallback(async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDeletingId(sessionId);
+    await fetch(`${BASE}/api/chat/sessions/${sessionId}`, { method: 'DELETE', headers: authHeaders() });
+    setSessions(prev => prev.filter(s => s.session_id !== sessionId));
+    if (activeSessionId === sessionId) { setActiveSessionId(null); setMessages([]); }
+    setDeletingId(null);
+  }, [activeSessionId]);
+
+  // ── Scroll to bottom ────────────────────────────────────────────────────────
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  // ── Send message ────────────────────────────────────────────────────────────
+  const sendMessage = useCallback(async (text?: string) => {
+    const question = (text ?? input).trim();
+    if (!question || loading) return;
+
+    // Ensure we have a session
+    let sessionId = activeSessionId;
+    if (!sessionId) {
+      const res = await fetch(`${BASE}/api/chat/sessions`, { method: 'POST', headers: authHeaders() });
+      const d = await res.json();
+      sessionId = d.session_id;
+      setActiveSessionId(sessionId);
+    }
+
+    setInput('');
+    if (textareaRef.current) { textareaRef.current.style.height = 'auto'; }
+
+    const userId  = `u-${Date.now()}`;
+    const thinkId = `t-${Date.now()}`;
+    setMessages(prev => [
+      ...prev,
+      { id: userId,  role: 'user',      content: question, timestamp: new Date() },
+      { id: thinkId, role: 'assistant', content: '', timestamp: new Date(), isStreaming: true },
+    ]);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${BASE}/api/chat`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ question, session_id: sessionId }),
+      });
+      if (!res.ok) throw new Error();
+      const data: { answer: string; sources: Source[]; session_id: string } = await res.json();
+
+      setMessages(prev => prev.map(m =>
+        m.id === thinkId
+          ? { ...m, content: data.answer, sources: data.sources, isStreaming: false }
+          : m
+      ));
+
+      // Refresh session list to show new/updated session
+      const listRes = await fetch(`${BASE}/api/chat/sessions`, { headers: authHeaders() });
+      if (listRes.ok) setSessions(await listRes.json());
+
+    } catch {
+      setMessages(prev => prev.map(m =>
+        m.id === thinkId
+          ? { ...m, content: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', isStreaming: false }
+          : m
+      ));
+    } finally {
+      setLoading(false);
+    }
+  }, [input, loading, activeSessionId]);
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+
+  const hasMessages = messages.length > 0;
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      <AnimatePresence>
-        {notification && (
-          <motion.div 
-            initial={{ opacity: 0, y: -20, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] px-6 py-3 bg-slate-900 text-white rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-medium"
+    <div className="flex h-[calc(100vh-20rem)] -mx-8 overflow-hidden rounded-3xl border border-slate-100 shadow-sm bg-white">
+
+      {/* ── Sidebar ── */}
+      <AnimatePresence initial={false}>
+        {sidebarOpen && (
+          <motion.aside
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 280, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="flex flex-col border-r border-slate-100 bg-slate-50/80 overflow-hidden shrink-0"
           >
-            <CheckCircle2 size={18} className="text-success" />
-            {notification}
-          </motion.div>
+            {/* New chat button */}
+            <div className="p-4 border-b border-slate-100">
+              <button onClick={newSession}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white rounded-2xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
+                <Plus size={16} /> Yeni Sohbet
+              </button>
+            </div>
+
+            {/* Session list */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {loadingSessions ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 size={20} className="animate-spin text-slate-300" />
+                </div>
+              ) : sessions.length === 0 ? (
+                <div className="text-center py-10 text-slate-400">
+                  <MessageSquare size={28} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-xs">Henüz sohbet yok</p>
+                </div>
+              ) : (
+                sessions.map(s => (
+                  <motion.div key={s.session_id} layout
+                    onClick={() => loadSession(s.session_id)}
+                    className={`group relative flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all
+                      ${activeSessionId === s.session_id
+                        ? 'bg-primary/8 border border-primary/15'
+                        : 'hover:bg-slate-100 border border-transparent'}`}>
+                    <MessageSquare size={14} className={`mt-0.5 shrink-0 ${activeSessionId === s.session_id ? 'text-primary' : 'text-slate-400'}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-medium truncate leading-snug ${activeSessionId === s.session_id ? 'text-primary' : 'text-slate-700'}`}>
+                        {s.title}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {s.count} mesaj
+                      </p>
+                    </div>
+                    <button
+                      onClick={e => deleteSession(s.session_id, e)}
+                      disabled={deletingId === s.session_id}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-lg hover:bg-red-50 hover:text-red-400 text-slate-300 shrink-0">
+                      {deletingId === s.session_id
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <Trash2 size={12} />}
+                    </button>
+                  </motion.div>
+                ))
+              )}
+            </div>
+          </motion.aside>
         )}
       </AnimatePresence>
 
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-medium">YÖK Mevzuatı Bilgi Portalı</h1>
-        <p className="text-slate-500">RAG destekli yapay zeka, sorularınızı ilgili yasa maddelerine dayandırarak yanıtlar.</p>
-      </div>
+      {/* ── Main Chat Area ── */}
+      <div className="flex-1 flex flex-col min-w-0">
 
-      {/* Chat History */}
-      <div className="space-y-6 mb-8">
-        {history.map((chat, i) => (
-          <div key={i} className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex justify-end">
-              <div className="bg-slate-100 text-slate-700 px-4 py-2 rounded-2xl rounded-tr-none max-w-[80%] text-sm shadow-sm">
-                {chat.q}
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="w-8 h-8 bg-academic/10 text-academic rounded-full flex items-center justify-center flex-shrink-0">
-                <Bot size={18} />
-              </div>
-              <div className="bg-white border border-gray-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none max-w-[80%] text-sm shadow-md leading-relaxed">
-                {chat.a}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Search Input */}
-      <div className="sticky bottom-8 bg-white/80 backdrop-blur-md p-4 rounded-3xl border border-gray-200 shadow-xl z-20">
-        <form onSubmit={handleSearch} className="relative">
-          <input 
-            type="text" 
-            placeholder="Mevzuat hakkında bir soru sorun..." 
-            className="w-full bg-gray-50 border border-gray-200 rounded-2xl px-6 py-4 pr-32 outline-none focus:border-primary focus:bg-white transition-all text-sm"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button 
-            type="submit"
-            className="absolute right-2 top-2 bottom-2 bg-primary text-white px-6 rounded-xl font-medium text-sm flex items-center gap-2 hover:bg-opacity-90 transition-all shadow-lg shadow-primary/20"
-            disabled={isSearching}
-          >
-            {isSearching ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <Send size={18} />
-            )}
-            Sorgula
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 shrink-0">
+          <button onClick={() => setSidebarOpen(v => !v)}
+            className="p-2 rounded-xl hover:bg-slate-100 transition-all text-slate-400">
+            <ChevronLeft size={18} className={`transition-transform ${sidebarOpen ? '' : 'rotate-180'}`} />
           </button>
-        </form>
-        
-        <div className="mt-4 flex flex-wrap gap-2">
-          {suggestions.map((s) => (
-            <button 
-              key={s}
-              className="text-[10px] bg-white border border-gray-200 text-slate-500 px-3 py-1.5 rounded-full hover:border-primary hover:text-primary transition-all shadow-sm"
-              onClick={() => handleSearch(undefined, s)}
-            >
-              {s}
-            </button>
-          ))}
+          <div className="flex items-center gap-2">
+            <Scale size={18} className="text-primary" />
+            <span className="font-bold text-slate-800 text-sm">YÖK Hukuki Danışman</span>
+          </div>
+          <span className="ml-auto text-[10px] text-slate-300 font-medium uppercase tracking-widest">RAG destekli · GPT-4o-mini</span>
         </div>
-      </div>
 
-      {/* Search Result (CRAG View) */}
-      {showResult && (
-        <div className="card border-primary/20 bg-primary/5 animate-in zoom-in-95 duration-300 shadow-2xl">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <span className="status-pill bg-academic text-white text-[10px] font-bold">CRAG MODEL</span>
-              <div className="flex items-center gap-4 text-[10px] text-slate-500 font-medium">
-                <span className="flex items-center gap-1"><Clock size={12} /> 1.4s</span>
-                <span className="flex items-center gap-1"><Search size={12} /> 0.91 Cosine Sim</span>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+
+          {/* Empty state */}
+          {!hasMessages && (
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center h-full gap-8 text-center">
+              <div className="space-y-3">
+                <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+                  <Scale size={28} className="text-primary" />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">Nasıl yardımcı olabilirim?</h2>
+                <p className="text-sm text-slate-400 max-w-sm">
+                  YÖK mevzuatı hakkında sorularınızı sorun. Cevaplar gerçek kanun ve yönetmelik maddelerine dayandırılır.
+                </p>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => showNotification('Geri bildiriminiz için teşekkürler!')}
-                className="p-2 hover:bg-white rounded-lg text-slate-400 hover:text-success transition-all"
-              >
-                <ThumbsUp size={16} />
-              </button>
-              <button 
-                onClick={() => showNotification('Geri bildiriminiz için teşekkürler!')}
-                className="p-2 hover:bg-white rounded-lg text-slate-400 hover:text-danger transition-all"
-              >
-                <ThumbsDown size={16} />
-              </button>
-            </div>
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
+                {SUGGESTIONS.map((s, i) => (
+                  <motion.button key={s}
+                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    onClick={() => sendMessage(s)}
+                    className="text-left text-xs px-4 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:border-primary hover:text-primary hover:shadow-md transition-all font-medium flex items-start gap-2">
+                    <Sparkles size={12} className="text-primary shrink-0 mt-0.5" />
+                    {s}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          )}
 
-          <div className="bg-white rounded-xl p-6 shadow-sm border border-primary/5 mb-6">
-            <p className="text-sm text-slate-700 leading-relaxed">
-              {history[history.length - 1].a}
-            </p>
-          </div>
+          {/* Message bubbles */}
+          <AnimatePresence initial={false}>
+            {messages.map(msg => (
+              <motion.div key={msg.id}
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className={`flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
 
-          <div className="space-y-4">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Kaynak Referansları</p>
-            <div className="flex flex-wrap gap-3">
-              {['YÖK 2547 s.k. Md.44', 'Lisansüstü Yön. Md.12', 'Senato Kararı 2024/12'].map(ref => (
-                <button 
-                  key={ref} 
-                  onClick={() => showNotification(`Kaynak belge açılıyor: ${ref}`)}
-                  className="flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 rounded-lg text-xs text-primary font-medium hover:border-primary hover:shadow-md transition-all"
-                >
-                  {ref}
-                  <ExternalLink size={12} />
+                {msg.role === 'assistant' && (
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0 mt-1">
+                    <Scale size={15} className="text-primary" />
+                  </div>
+                )}
+
+                <div className={`max-w-[80%] flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                  {msg.role === 'user' ? (
+                    <div className="bg-primary text-white px-5 py-3 rounded-2xl rounded-tr-md text-sm leading-relaxed font-medium shadow-lg shadow-primary/15">
+                      {msg.content}
+                    </div>
+                  ) : msg.isStreaming ? (
+                    <div className="bg-white border border-slate-100 px-5 py-4 rounded-2xl rounded-tl-md shadow-sm flex items-center gap-3">
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map(i => (
+                          <div key={i} className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                            style={{ animationDelay: `${i * 0.15}s` }} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-slate-400 font-medium">Mevzuat inceleniyor...</span>
+                    </div>
+                  ) : (
+                    <div className="bg-white border border-slate-100 px-6 py-5 rounded-2xl rounded-tl-md shadow-sm space-y-4 w-full">
+                      <FormattedAnswer text={msg.content} />
+
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="pt-3 border-t border-slate-100">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                            <BookOpen size={10} /> Mevzuat Kaynakları
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {msg.sources.map((src, i) => (
+                              <a key={i} href={yokRefToUrl(src.name)} target="_blank" rel="noreferrer"
+                                title={src.text}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 border border-primary/15 rounded-xl text-[11px] font-bold text-primary hover:bg-primary/10 transition-all group">
+                                <Scale size={10} />
+                                {yokSourceLabel(src.name)}
+                                <ExternalLink size={9} className="opacity-40 group-hover:opacity-100 transition-opacity" />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-slate-300 flex items-center gap-1">
+                        <Clock size={9} />
+                        {msg.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {msg.role === 'user' && (
+                  <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center shrink-0 mt-1">
+                    <User size={14} className="text-slate-500" />
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="shrink-0 px-6 pb-6 pt-3 border-t border-slate-100">
+          {hasMessages && !loading && (
+            <div className="flex gap-2 flex-wrap mb-3">
+              {SUGGESTIONS.slice(0, 3).map(s => (
+                <button key={s} onClick={() => sendMessage(s)}
+                  className="text-[10px] px-3 py-1.5 bg-white border border-slate-200 rounded-full text-slate-500 hover:border-primary hover:text-primary transition-all font-medium">
+                  {s.length > 42 ? s.slice(0, 42) + '…' : s}
                 </button>
               ))}
             </div>
+          )}
+          <div className="flex gap-3 items-end bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:border-primary focus-within:shadow-md transition-all">
+            <textarea ref={textareaRef} rows={1}
+              placeholder="Mevzuat hakkında bir soru sorun... (Enter ile gönder)"
+              className="flex-1 resize-none outline-none text-sm text-slate-700 placeholder:text-slate-400 leading-relaxed bg-transparent min-h-[36px] max-h-32"
+              value={input}
+              onChange={e => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+              }}
+              onKeyDown={handleKeyDown}
+              disabled={loading}
+            />
+            <button onClick={() => sendMessage()}
+              disabled={loading || !input.trim()}
+              className="w-9 h-9 bg-primary text-white rounded-xl flex items-center justify-center hover:bg-primary/90 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0 shadow-md shadow-primary/20">
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            </button>
           </div>
-
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-white/50 rounded-xl border border-gray-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Erişilen Metin Parçası 1</p>
-              <p className="text-[11px] text-slate-600 italic">"Yükseköğretim kurumlarında öğrenim gören öğrencilere tanınacak haklar ve yükümlülükler..."</p>
-            </div>
-            <div className="p-4 bg-white/50 rounded-xl border border-gray-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Erişilen Metin Parçası 2</p>
-              <p className="text-[11px] text-slate-600 italic">"Azami sürelerin hesaplanmasında kayıt dondurulan süreler dikkate alınmaz..."</p>
-            </div>
-          </div>
+          <p className="text-center text-[10px] text-slate-300 mt-2">
+            Yanıtlar YÖK mevzuatına dayandırılmaktadır · Resmi hukuki tavsiye yerine geçmez
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 }

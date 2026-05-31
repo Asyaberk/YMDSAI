@@ -15,7 +15,6 @@ import {
   X,
   ChevronRight,
   Info,
-  BookOpen,
   Scale
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,12 +34,11 @@ export default function Layout() {
   const [showHelp, setShowHelp] = useState(false);
 
   const userNavItems = [
-    { name: 'Genel Bakış', path: '/', icon: LayoutDashboard, desc: 'Sistem genelindeki uyum verilerini ve özet istatistikleri takip edin.' },
-    { name: 'Mevzuat Arşivi', path: '/archive', icon: BookOpen, desc: 'Üniversitenizdeki tüm belgeleri ve geçmiş revizyonları yönetin.' },
-    { name: 'Belge Yükle', path: '/upload', icon: Upload, desc: 'Analiz edilmesini istediğiniz üniversite yönetmelik taslaklarını sisteme yükleyin.' },
-    { name: 'Uyumluluk Analizi', path: '/analysis', icon: FileSearch, desc: 'Yüklenen belgelerin YÖK mevzuatıyla madde madde karşılaştırmasını görün.' },
-    { name: 'Bilgi Portalı', path: '/portal', icon: Search, desc: 'Mevzuat hakkındaki sorularınızı yapay zekaya sorun, yasal dayanaklı cevaplar alın.' },
-    { name: 'YÖK Mevzuatı', path: '/mevzuat', icon: Scale, desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, resmi kaynaklara ulaşın.' },
+    { name: 'Genel Bakış',       path: '/',          icon: LayoutDashboard, desc: 'Sistem genelindeki uyum verilerini ve özet istatistikleri takip edin.' },
+    { name: 'Belge Yükle',       path: '/upload',    icon: Upload,          desc: 'Analiz edilmesini istediğiniz üniversite yönetmelik taslaklarını sisteme yükleyin.' },
+    { name: 'Uyumluluk Analizleri', path: '/analysis',  icon: FileSearch,      desc: 'Yüklenen belgelerinizi listeleyin, inceleyin, silin veya madde madde YÖK uyum analizini görün.' },
+    { name: 'Bilgi Portalı',     path: '/portal',    icon: Search,          desc: 'Mevzuat hakkındaki sorularınızı yapay zekaya sorun, yasal dayanaklı cevaplar alın.' },
+    { name: 'YÖK Mevzuatı',      path: '/mevzuat',   icon: Scale,           desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, resmi kaynaklara ulaşın.' },
   ];
 
   const adminNavItems = [
@@ -150,7 +148,7 @@ export default function Layout() {
               {location.pathname !== '/admin' && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success rounded-full text-xs font-bold border border-success/10">
                    <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
-                   Mevzuat Güncel · 2025
+                   Mevzuat Güncel · {new Date().getFullYear()}
                 </div>
               )}
               {location.pathname === '/admin' && (

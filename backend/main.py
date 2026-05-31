@@ -13,6 +13,7 @@ with engine.connect() as conn:
     try:
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS full_text TEXT"))
         conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS retrieved_chunks_json TEXT"))
+        conn.execute(text("ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS session_id TEXT"))
         conn.commit()
     except Exception as e:
         print(f"[Migration] Skipped (already exists): {e}")
