@@ -11,7 +11,7 @@ from datetime import datetime
 from backend.db.database import get_db
 from backend.models import schemas, domain
 from backend.services.document_parser import parse_pdf
-from backend.services.rag_service import rag_service
+from backend.services.rag_service import RagService
 from backend.api.auth import get_current_user
 from backend.core.config import settings
 from jose import JWTError, jwt
@@ -61,7 +61,6 @@ async def analyze_document(
     full_text = " ".join(chunks)
 
     # Dynamic pipeline/model
-    from backend.services.rag_service import RagService
     svc = RagService(pipeline=pipeline, model=model)
     results = svc.analyze_document(full_text, file.filename)
 
