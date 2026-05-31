@@ -51,6 +51,7 @@ services:
     volumes:
       - ./data:/app/data                          # YÖK PDF'leri
       - ./experiment_outputs:/app/experiment_outputs  # CSV sonuçlar
+      - ./uploads:/app/uploads                    # Yüklenen PDF'ler
     depends_on:
       db:
         condition: service_healthy

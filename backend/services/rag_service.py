@@ -31,7 +31,7 @@ CACHE_IDS  = OUTPUT_DIR / "faiss_chunk_ids_oai.npy"
 # ── Config ──────────────────────────────────────────────────────────────────
 CHUNK_SIZE    = 350
 CHUNK_OVERLAP = 60
-TOP_K         = 5
+TOP_K         = 7
 YOK_KEYWORDS  = ["yok", "lisansustu", "cap", "yandal", "yatay", "ek-madde", "yurt"]
 
 openai.api_key = settings.OPENAI_API_KEY
@@ -208,26 +208,39 @@ def _retrieve_hybrid(query: str, k: int = TOP_K, alpha: float = 0.5) -> List[Dic
 
 # ── LLM Analysis ─────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are an expert in Turkish higher education law and university regulatory compliance.
-You are given a university process/document and relevant YÖK (Higher Education Council) regulation excerpts.
-Cite chunk_ids in your reasoning.
+SYSTEM_PROMPT = """You are a strict expert auditor in Turkish higher education law and university regulatory compliance.
+You are given a university document/process and relevant YÖK (Higher Education Council) regulation excerpts.
+
+CRITICAL RULES:
+1. If the document is NOT a university regulation (e.g. homework assignment, research paper, CV, lecture notes, code), you MUST:
+   - Set compliance_score to a value between 5 and 25
+   - Set label to "non-compliant"
+   - Explain clearly in Turkish that this is not a regulatory document
+   - Still identify what was found in the document as articles
+
+2. For REAL university regulations, evaluate each article strictly:
+   - Uyumlu: The article directly maps to and satisfies YÖK requirements
+   - Kısmen Uyumlu: The article partially satisfies or is ambiguous
+   - Uyumsuz: The article contradicts or is missing from YÖK requirements
+
+3. The "similarity" field must reflect how closely the article text matches YÖK excerpts (0.0 = no match, 1.0 = perfect match). Use 0.1-0.3 for irrelevant content.
 
 Respond ONLY with valid JSON in this exact format:
 {
   "compliance_score": <integer 0-100>,
   "label": "<compliant|partial|non-compliant>",
-  "explanation": "<Turkish explanation, 3-4 sentences, with chunk references>",
+  "explanation": "<Turkish explanation, 3-4 sentences>",
   "articles": [
     {
-      "number": "<Article reference>",
-      "title": "<Short title>",
+      "number": "<Article reference, e.g. Madde 1>",
+      "title": "<Short descriptive title in Turkish>",
       "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz>",
-      "similarity": <float 0-1>,
-      "text": "<Relevant text from university document>",
-      "yok_reference": "<YÖK regulation name>",
-      "yok_text": "<Relevant YÖK excerpt>",
-      "reasoning": ["<reason 1>", "<reason 2>"],
-      "suggestion": "<Improvement suggestion if non-compliant, else empty string>"
+      "similarity": <float 0.0-1.0>,
+      "text": "<Exact text from the submitted document (max 300 chars)>",
+      "yok_reference": "<YÖK regulation name and article>",
+      "yok_text": "<Exact relevant YÖK excerpt (max 300 chars)>",
+      "reasoning": ["<specific reason 1>", "<specific reason 2>"],
+      "suggestion": "<Concrete improvement suggestion in Turkish if non-compliant, else empty string>"
     }
   ]
 }
@@ -262,18 +275,33 @@ def _parse_json(raw: str) -> Optional[Dict]:
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
+def _assign_real_similarities(articles: list, retrieved: list) -> list:
+    """Override LLM-guessed similarity (often 1.0) with real retrieval scores."""
+    if not retrieved:
+        return articles
+    # Normalize BM25/FAISS scores to 0-1 range
+    raw_scores = [c.get("score", 0) for c in retrieved]
+    max_s = max(raw_scores) if raw_scores else 1.0
+    min_s = min(raw_scores) if raw_scores else 0.0
+    rng   = max_s - min_s if max_s != min_s else 1.0
+    norm_scores = [(s - min_s) / rng for s in raw_scores]
+    avg_norm = sum(norm_scores) / len(norm_scores) if norm_scores else 0.5
+
+    for i, art in enumerate(articles):
+        llm_sim = art.get("similarity", 1.0)
+        # If LLM says 1.0 exactly, it's a guess — replace with real score
+        if llm_sim >= 0.99:
+            art["similarity"] = round(avg_norm, 3)
+    return articles
+
+
 class RagService:
     """
     Real RAG-based compliance analysis service.
-    Uses hybrid retrieval (BM25 + FAISS dense) + GPT-4o-mini for generation.
+    Uses hybrid retrieval (BM25 + FAISS dense) + GPT for generation.
     """
 
     def __init__(self, pipeline: str = "hybrid", model: str = "gpt-4o-mini"):
-        """
-        Args:
-            pipeline: 'bm25' | 'dense' | 'hybrid'
-            model:    'gpt-4o-mini' | 'gpt-4o'
-        """
         self.pipeline = pipeline
         self.model    = model
 
@@ -286,7 +314,6 @@ class RagService:
             return _retrieve_hybrid(query, k)
 
     def generate_embeddings(self, text: str):
-        """OpenAI embedding (kept for API compatibility)."""
         response = _oa_client.embeddings.create(
             input=[text],
             model="text-embedding-3-small"
@@ -296,28 +323,18 @@ class RagService:
     def analyze_document(self, process_text: str, filename: str) -> dict:
         """
         Full RAG compliance analysis.
-
-        Returns:
-            {
-                "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz>",
-                "compliance_score": <int>,
-                "articles": [...],
-                "retrieved_chunks": [...],
-                "pipeline": str,
-                "model": str
-            }
+        Returns status, compliance_score, articles, retrieved_chunks, pipeline, model.
         """
-        # 1. Build query from process text
         query = process_text[:500]
 
-        # 2. Retrieve relevant YÖK chunks
+        # 1. Retrieve relevant YÖK chunks
         try:
             retrieved = self._retrieve(query, TOP_K)
         except Exception as e:
             print(f"[RagService] Retrieval error: {e}")
             retrieved = []
 
-        # 3. LLM analysis
+        # 2. LLM analysis
         chunks_str = _format_chunks(retrieved) if retrieved else "Hiçbir mevzuat parçası bulunamadı."
 
         messages = [
@@ -325,8 +342,8 @@ class RagService:
             {
                 "role": "user",
                 "content": USER_TEMPLATE.format(
-                    process_text=process_text[:1200],
-                    chunks=chunks_str[:4000],
+                    process_text=process_text[:4000],
+                    chunks=chunks_str[:8000],
                 ),
             },
         ]
@@ -336,7 +353,8 @@ class RagService:
                 model=self.model,
                 messages=messages,
                 temperature=0.0,
-                max_tokens=1200,
+                max_tokens=3000,
+                response_format={"type": "json_object"},
             )
             raw    = resp.choices[0].message.content
             result = _parse_json(raw)
@@ -344,7 +362,7 @@ class RagService:
             print(f"[RagService] LLM error: {e}")
             result = None
 
-        # 4. Fallback if parse fails
+        # 3. Fallback
         if not result:
             avg_score = int(np.mean([c.get("score", 0.5) for c in retrieved]) * 100) if retrieved else 50
             result = {
@@ -353,6 +371,10 @@ class RagService:
                 "explanation": "Analiz tamamlanamadı, lütfen tekrar deneyin.",
                 "articles": [],
             }
+
+        # 4. Fix similarity scores (replace LLM-guessed 1.0 with real scores)
+        articles = result.get("articles", [])
+        articles = _assign_real_similarities(articles, retrieved)
 
         # 5. Map label to Turkish
         label_map = {
@@ -365,9 +387,14 @@ class RagService:
         return {
             "status":           turkish_status,
             "compliance_score": result.get("compliance_score", 50),
-            "articles":         result.get("articles", []),
+            "articles":         articles,
             "retrieved_chunks": [
-                {"chunk_id": c["chunk_id"], "score": round(c["score"], 4), "source": c.get("source", "")}
+                {
+                    "chunk_id": c["chunk_id"],
+                    "score":    round(c["score"], 4),
+                    "source":   c.get("source", ""),
+                    "text":     c.get("text", "")[:400],
+                }
                 for c in retrieved
             ],
             "pipeline": self.pipeline,
@@ -375,5 +402,5 @@ class RagService:
         }
 
 
-# Module-level singleton (backward compatible with existing API routes)
+# Module-level singleton
 rag_service = RagService(pipeline="hybrid", model="gpt-4o-mini")

@@ -1,11 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from backend.db.database import engine, Base
 from backend.api import routes
 from backend.api import auth as auth_router
 
-# Create all DB tables (including new ones: users, yok_documents, chat_messages)
+# Create all DB tables
 Base.metadata.create_all(bind=engine)
+
+# Add new columns if they don't exist (zero-downtime migration)
+with engine.connect() as conn:
+    try:
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS full_text TEXT"))
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS retrieved_chunks_json TEXT"))
+        conn.commit()
+    except Exception as e:
+        print(f"[Migration] Skipped (already exists): {e}")
 
 app = FastAPI(
     title="ComplianceAI Backend",

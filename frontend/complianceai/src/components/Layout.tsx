@@ -15,7 +15,8 @@ import {
   X,
   ChevronRight,
   Info,
-  BookOpen
+  BookOpen,
+  Scale
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { clsx, type ClassValue } from 'clsx';
@@ -39,6 +40,7 @@ export default function Layout() {
     { name: 'Belge Yükle', path: '/upload', icon: Upload, desc: 'Analiz edilmesini istediğiniz üniversite yönetmelik taslaklarını sisteme yükleyin.' },
     { name: 'Uyumluluk Analizi', path: '/analysis', icon: FileSearch, desc: 'Yüklenen belgelerin YÖK mevzuatıyla madde madde karşılaştırmasını görün.' },
     { name: 'Bilgi Portalı', path: '/portal', icon: Search, desc: 'Mevzuat hakkındaki sorularınızı yapay zekaya sorun, yasal dayanaklı cevaplar alın.' },
+    { name: 'YÖK Mevzuatı', path: '/mevzuat', icon: Scale, desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, resmi kaynaklara ulaşın.' },
   ];
 
   const adminNavItems = [

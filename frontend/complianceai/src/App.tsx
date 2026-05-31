@@ -11,6 +11,7 @@ import Reports from './pages/Reports';
 import Archive from './pages/Archive';
 import Landing from './pages/Landing';
 import AdminDashboard from './pages/AdminDashboard';
+import YokMevzuat from './pages/YokMevzuat';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
   const { user, isLoading } = useAuth();
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="archive" element={<Archive />} />
             <Route path="experiments" element={<RAGExperiments />} />
             <Route path="portal" element={<KnowledgePortal />} />
+            <Route path="mevzuat" element={<YokMevzuat />} />
             <Route path="reports" element={<Reports />} />
             <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
           </Route>
