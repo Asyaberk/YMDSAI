@@ -19,12 +19,14 @@ import openai
 from backend.core.config import settings
 
 # ── Paths ──────────────────────────────────────────────────────────────────
-BASE_DIR   = Path(__file__).parent.parent.parent
+# Docker: WORKDIR=/app → BASE_DIR=/app. Local: project root.
+BASE_DIR   = Path(os.environ.get("APP_BASE_DIR", str(Path(__file__).parent.parent.parent)))
 DATA_DIR   = BASE_DIR / "data"
 OUTPUT_DIR = BASE_DIR / "experiment_outputs"
 
-CACHE_VEC  = OUTPUT_DIR / "faiss_vectors.npy"
-CACHE_IDS  = OUTPUT_DIR / "faiss_chunk_ids.npy"
+# Use OpenAI-cached vectors (renamed from faiss_vectors.npy)
+CACHE_VEC  = OUTPUT_DIR / "faiss_vectors_oai.npy"
+CACHE_IDS  = OUTPUT_DIR / "faiss_chunk_ids_oai.npy"
 
 # ── Config ──────────────────────────────────────────────────────────────────
 CHUNK_SIZE    = 350
@@ -90,7 +92,7 @@ class _IndexStore:
 
     @classmethod
     def _initialize(cls):
-        # ── Build YÖK chunk list ────────────────────────────────────────────
+        # ── Build YÖK chunk list ────────────────────────────────────
         cls.yok_chunks = _build_yok_chunks()
         if not cls.yok_chunks:
             raise RuntimeError(
@@ -98,34 +100,49 @@ class _IndexStore:
                 "data/ dizininde yok.pdf vb. dosyaların bulunduğundan emin olun."
             )
 
-        # ── BM25 ────────────────────────────────────────────────────────────
+        # ── BM25 ──────────────────────────────────────────────────────────
         from rank_bm25 import BM25Okapi
         cls.bm25 = BM25Okapi([tokenize(c["text"]) for c in cls.yok_chunks])
 
-        # ── FAISS ───────────────────────────────────────────────────────────
+        # ── FAISS (OpenAI embeddings, no sentence-transformers) ─────────────
         import faiss
-        from sentence_transformers import SentenceTransformer
-
-        model_name = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-        cls.faiss_emb = SentenceTransformer(model_name)
 
         if CACHE_VEC.exists() and CACHE_IDS.exists():
-            vecs = np.load(str(CACHE_VEC))
+            # Cache hit — load pre-built OpenAI vectors
+            vecs = np.load(str(CACHE_VEC)).astype("float32")
+            print(f"[IndexStore] Loaded FAISS cache: {vecs.shape}")
         else:
-            vecs = cls.faiss_emb.encode(
-                [c["text"] for c in cls.yok_chunks],
-                show_progress_bar=False,
-                normalize_embeddings=True,
-                batch_size=32,
-            ).astype("float32")
+            # Cache miss — embed all chunks via OpenAI API
+            print("[IndexStore] Building FAISS index via OpenAI embeddings...")
+            texts = [c["text"] for c in cls.yok_chunks]
+            vecs  = _embed_openai(texts)
             np.save(str(CACHE_VEC), vecs)
             np.save(str(CACHE_IDS), np.array([c["chunk_id"] for c in cls.yok_chunks]))
+            print(f"[IndexStore] FAISS index saved: {vecs.shape}")
 
         idx = faiss.IndexFlatIP(vecs.shape[1])
         idx.add(vecs)
         cls.faiss_idx = idx
 
         cls._initialized = True
+
+
+def _embed_openai(texts: List[str], batch_size: int = 100) -> np.ndarray:
+    """Embed texts using OpenAI text-embedding-3-small (384-dim projection)."""
+    all_vecs = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        resp  = _oa_client.embeddings.create(
+            input=batch,
+            model="text-embedding-3-small",
+            dimensions=384,
+        )
+        all_vecs.extend([d.embedding for d in resp.data])
+    arr = np.array(all_vecs, dtype="float32")
+    # L2 normalize for cosine similarity via inner product
+    norms = np.linalg.norm(arr, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return arr / norms
 
 
 # ── Retrieval ────────────────────────────────────────────────────────────────
@@ -148,14 +165,14 @@ def _retrieve_bm25(query: str, k: int = TOP_K) -> List[Dict]:
 
 def _retrieve_dense(query: str, k: int = TOP_K) -> List[Dict]:
     _IndexStore.ensure_loaded()
-    qv     = _IndexStore.faiss_emb.encode([query], normalize_embeddings=True).astype("float32")
-    D, I   = _IndexStore.faiss_idx.search(qv, k)
+    qv    = _embed_openai([query])          # (1, 384)
+    D, I  = _IndexStore.faiss_idx.search(qv, k)
     return [
         {
             "chunk_id": int(I[0][r]),
-            "score": float(D[0][r]),
-            "text": _IndexStore.yok_chunks[I[0][r]]["text"],
-            "source": _IndexStore.yok_chunks[I[0][r]]["source"],
+            "score":    float(D[0][r]),
+            "text":     _IndexStore.yok_chunks[I[0][r]]["text"],
+            "source":   _IndexStore.yok_chunks[I[0][r]]["source"],
         }
         for r in range(k)
     ]

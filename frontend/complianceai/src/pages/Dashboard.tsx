@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   FileText, 
   CheckCircle2, 
@@ -8,7 +8,6 @@ import {
   TrendingUp,
   FileSearch,
   PlusCircle,
-  Users,
   ShieldCheck,
   Zap,
   ChevronRight
@@ -16,18 +15,61 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
+import { dashboard, DashboardMetrics } from '../lib/api';
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
 
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    dashboard.metrics()
+      .then(setMetrics)
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
   const stats = [
-    { name: 'Aktif Analizler', value: '12', icon: FileSearch, color: 'text-primary', bg: 'bg-primary/10' },
-    { name: 'Tamamlanan', value: '148', icon: CheckCircle2, color: 'text-success', bg: 'bg-success/10' },
-    { name: 'Kritik Risk', value: '3', icon: AlertTriangle, color: 'text-danger', bg: 'bg-danger/10' },
-    { name: 'Bekleyen', value: '7', icon: Clock, color: 'text-warning', bg: 'bg-warning/10' },
+    {
+      name: 'Aktif Analizler',
+      value: loading ? '—' : String(metrics?.stats.activeAnalyses ?? 0),
+      icon: FileSearch,
+      color: 'text-primary',
+      bg: 'bg-primary/10'
+    },
+    {
+      name: 'Tamamlanan',
+      value: loading ? '—' : String(metrics?.stats.completed ?? 0),
+      icon: CheckCircle2,
+      color: 'text-success',
+      bg: 'bg-success/10'
+    },
+    {
+      name: 'Kritik Risk',
+      value: loading ? '—' : String(metrics?.stats.critical ?? 0),
+      icon: AlertTriangle,
+      color: 'text-danger',
+      bg: 'bg-danger/10'
+    },
+    {
+      name: 'Bekleyen',
+      value: loading ? '—' : String(metrics?.stats.pending ?? 0),
+      icon: Clock,
+      color: 'text-warning',
+      bg: 'bg-warning/10'
+    },
   ];
+
+  const recentDocs = metrics?.recentDocuments ?? [];
+
+  const systemHealth = metrics?.systemHealth ?? {
+    ragModel: 'Yükleniyor...',
+    embeddingApi: 'Yükleniyor...',
+    database: 'Yükleniyor...',
+  };
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -69,9 +111,11 @@ export default function Dashboard() {
               <stat.icon size={24} />
             </div>
             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">{stat.name}</p>
-            <p className="text-3xl font-bold text-slate-900 mt-1">{stat.value}</p>
+            <p className={`text-3xl font-bold text-slate-900 mt-1 ${loading ? 'animate-pulse' : ''}`}>
+              {stat.value}
+            </p>
             <div className="mt-4 flex items-center gap-2 text-xs font-medium text-success bg-success/5 px-2 py-1 rounded-full w-fit">
-               <TrendingUp size={12} /> +12% bu ay
+               <TrendingUp size={12} /> Gerçek zamanlı
             </div>
           </motion.div>
         ))}
@@ -90,44 +134,63 @@ export default function Dashboard() {
             </button>
           </div>
           <div className="space-y-2">
-            {[
-              { id: '1', name: 'Lisansüstü Eğitim Taslağı', date: '2 saat önce', score: 84, status: 'Uyumsuz' },
-              { id: '2', name: 'Akademik Teşvik Yönergesi', date: '1 gün önce', score: 92, status: 'Uyumlu' },
-              { id: '3', name: 'Öğrenci Disiplin Yönetmeliği', date: '3 gün önce', score: 65, status: 'Kritik' },
-            ].map((analysis) => (
-              <button 
-                key={analysis.id} 
-                onClick={() => navigate('/analysis')}
-                className="w-full group p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex items-center justify-between text-left"
-              >
-                <div className="flex items-center gap-4">
-                   <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
-                      <FileText size={20} />
-                   </div>
-                   <div>
-                      <p className="text-sm font-bold text-slate-800">{analysis.name}</p>
-                      <p className="text-xs text-slate-400">{analysis.date}</p>
-                   </div>
+            {loading ? (
+              // Loading skeleton
+              [1, 2, 3].map(i => (
+                <div key={i} className="w-full p-4 rounded-2xl border border-slate-50 flex items-center gap-4 animate-pulse">
+                  <div className="w-10 h-10 bg-slate-100 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-slate-100 rounded-full w-1/2" />
+                    <div className="h-2 bg-slate-50 rounded-full w-1/4" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-6">
-                   <div className="text-right hidden sm:block">
-                      <div className="flex items-center gap-2">
-                         <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${analysis.score > 80 ? 'bg-success' : analysis.score > 70 ? 'bg-warning' : 'bg-danger'}`}
-                              style={{ width: `${analysis.score}%` }}
-                            />
-                         </div>
-                         <span className="text-xs font-bold text-slate-700">%{analysis.score}</span>
-                      </div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">Genişletilmiş Uyum</p>
-                   </div>
-                   <div className="p-2 text-slate-300 group-hover:text-primary transition-all">
-                      <ArrowUpRight size={18} />
-                   </div>
-                </div>
-              </button>
-            ))}
+              ))
+            ) : recentDocs.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <FileText size={40} className="mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">Henüz analiz yok.</p>
+                <button onClick={() => navigate('/upload')} className="mt-3 text-primary text-xs font-bold hover:underline">
+                  İlk belgeyi yükle →
+                </button>
+              </div>
+            ) : (
+              recentDocs.map((doc) => (
+                <button 
+                  key={doc.id} 
+                  onClick={() => navigate('/analysis')}
+                  className="w-full group p-4 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all flex items-center justify-between text-left"
+                >
+                  <div className="flex items-center gap-4">
+                     <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-400 group-hover:text-primary transition-colors">
+                        <FileText size={20} />
+                     </div>
+                     <div>
+                        <p className="text-sm font-bold text-slate-800">{doc.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {doc.uploadDate ? new Date(doc.uploadDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }) : ''}
+                        </p>
+                     </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                     <div className="text-right hidden sm:block">
+                        <div className="flex items-center gap-2">
+                           <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full ${doc.complianceScore > 80 ? 'bg-success' : doc.complianceScore > 60 ? 'bg-warning' : 'bg-danger'}`}
+                                style={{ width: `${doc.complianceScore}%` }}
+                              />
+                           </div>
+                           <span className="text-xs font-bold text-slate-700">%{doc.complianceScore}</span>
+                        </div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{doc.status}</p>
+                     </div>
+                     <div className="p-2 text-slate-300 group-hover:text-primary transition-all">
+                        <ArrowUpRight size={18} />
+                     </div>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
@@ -139,16 +202,16 @@ export default function Dashboard() {
                  <Zap size={24} className="text-amber-300" />
               </div>
               <div className="space-y-2">
-                 <h3 className="text-xl font-bold tracking-tight">AI İpucu</h3>
+                 <h3 className="text-xl font-bold tracking-tight">YÖK Mevzuatı</h3>
                  <p className="text-primary-foreground/70 text-sm leading-relaxed">
-                   YÖK'ün dünkü "Dönemsel Eğitim" kararı veritabanımıza eklendi. Bugün yapacağınız analizler yeni kararı da kapsayacaktır.
+                   Hibrit RAG pipeline aktif. BM25 + yoğun vektör arama ile en güncel YÖK mevzuatı taranıyor.
                  </p>
               </div>
               <button 
                 onClick={() => navigate('/upload')}
                 className="w-full py-4 bg-white text-primary rounded-2xl font-bold text-sm shadow-xl hover:bg-slate-50 transition-all relative z-10"
               >
-                 Hemen Güncelle
+                 Analiz Başlat
               </button>
            </div>
 
@@ -159,9 +222,9 @@ export default function Dashboard() {
               </div>
               <div className="space-y-4">
                  {[
-                   { label: 'RAG Modeli', status: 'Online', color: 'text-success' },
-                   { label: 'Embedding API', status: 'Optimal', color: 'text-success' },
-                   { label: 'Mevzuat Veritabanı', status: 'Güncel 25.04', color: 'text-primary' },
+                   { label: 'RAG Modeli', status: systemHealth.ragModel, color: 'text-success' },
+                   { label: 'Embedding API', status: systemHealth.embeddingApi, color: 'text-success' },
+                   { label: 'Mevzuat DB', status: systemHealth.database, color: 'text-primary' },
                  ].map((s, i) => (
                    <div key={i} className="flex justify-between items-center text-xs font-bold">
                       <span className="text-slate-400 uppercase tracking-widest">{s.label}</span>

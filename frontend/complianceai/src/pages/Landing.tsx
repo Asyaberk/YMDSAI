@@ -21,10 +21,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import Logo from '../components/Logo';
 
 export default function Landing() {
-  const { login, register, user } = useAuth();
+  const { login, register, user, error: authError } = useAuth();
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState<'none' | 'login' | 'register'>('none');
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'USER' as const });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'USER' as 'USER' | 'ADMIN' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // If user is already logged in, redirect to dashboard
   useEffect(() => {
@@ -33,13 +35,27 @@ export default function Landing() {
     }
   }, [user, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (authMode === 'login') {
-      login(formData.role as any);
-    } else {
-      register(formData.name || 'Yeni Kullanıcı', formData.email, formData.role as any);
+    setIsSubmitting(true);
+    setApiError(null);
+    try {
+      if (authMode === 'login') {
+        await login(formData.email, formData.password);
+      } else {
+        await register(formData.name || 'Yeni Kullanıcı', formData.email, formData.password, formData.role);
+      }
+    } catch (e: any) {
+      setApiError(e.message ?? 'Bir hata oluştu');
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  // Reset error when switching modes
+  const switchMode = (mode: 'login' | 'register' | 'none') => {
+    setApiError(null);
+    setAuthMode(mode);
   };
 
   const features = [
@@ -71,14 +87,12 @@ export default function Landing() {
           <a href="#teknoloji" className="hover:text-primary transition-colors">Teknoloji</a>
         </div>
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setAuthMode('login')}
+          <button           onClick={() => switchMode('login')}
             className="text-sm font-semibold text-slate-600 hover:text-primary transition-colors"
           >
             Giriş Yap
           </button>
-          <button 
-            onClick={() => setAuthMode('register')}
+          <button                   onClick={() => switchMode('register')}
             className="btn-primary"
           >
             Hesap Oluştur
@@ -118,7 +132,7 @@ export default function Landing() {
               
               <div className="flex flex-wrap gap-4 pt-4">
                 <button 
-                  onClick={() => setAuthMode('register')}
+                onClick={() => switchMode('register')}
                   className="px-8 py-5 rounded-2xl bg-primary text-white font-bold text-lg flex items-center gap-3 shadow-2xl shadow-primary/30 hover:scale-[1.02] transition-all"
                 >
                   Ücretsiz Deneyin <ArrowRight size={22} />
@@ -254,8 +268,7 @@ export default function Landing() {
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               className="bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden relative"
             >
-              <button 
-                onClick={() => setAuthMode('none')}
+              <button               onClick={() => switchMode('none')}
                 className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 transition-colors"
                 id="close-auth"
               >
@@ -276,6 +289,14 @@ export default function Landing() {
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* Error message */}
+                  {(apiError || authError) && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-100 rounded-xl text-red-600 text-xs font-medium">
+                      <AlertTriangle size={14} />
+                      {apiError || authError}
+                    </div>
+                  )}
+
                   {authMode === 'register' && (
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Ad Soyad</label>
@@ -309,6 +330,21 @@ export default function Landing() {
                   </div>
 
                   <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Şifre</label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input 
+                        type="password" 
+                        required
+                        className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-primary focus:bg-white transition-all text-sm"
+                        placeholder="••••••••"
+                        value={formData.password}
+                        onChange={e => setFormData({...formData, password: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Kullanıcı Türü</label>
                     <div className="grid grid-cols-2 gap-3">
                       <button 
@@ -332,18 +368,19 @@ export default function Landing() {
 
                   <button 
                     type="submit"
-                    className="w-full btn-primary py-5 text-lg shadow-xl shadow-primary/20"
+                    disabled={isSubmitting}
+                    className="w-full btn-primary py-5 text-lg shadow-xl shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
                     id="submit-auth"
                   >
-                    {authMode === 'login' ? 'Giriş Yap' : 'Hesabı Başlat'}
+                    {isSubmitting ? 'Lütfen bekleyin...' : authMode === 'login' ? 'Giriş Yap' : 'Hesabı Başlat'}
                   </button>
                 </form>
 
                 <div className="text-center text-sm text-slate-400">
                   {authMode === 'login' ? (
-                    <p>Hesabınız yok mu? <button onClick={() => setAuthMode('register')} className="text-primary font-bold hover:underline">Hemen Oluşturun</button></p>
+                    <p>Hesabınız yok mu? <button onClick={() => switchMode('register')} className="text-primary font-bold hover:underline">Hemen Oluşturun</button></p>
                   ) : (
-                    <p>Zaten hesabınız var mı? <button onClick={() => setAuthMode('login')} className="text-primary font-bold hover:underline">Giriş Yapın</button></p>
+                    <p>Zaten hesabınız var mı? <button onClick={() => switchMode('login')} className="text-primary font-bold hover:underline">Giriş Yapın</button></p>
                   )}
                 </div>
               </div>

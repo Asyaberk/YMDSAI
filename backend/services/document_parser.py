@@ -1,11 +1,12 @@
-import pdfplumber
+from pypdf import PdfReader
 import io
 
 def parse_pdf(contents: bytes) -> list[str]:
+    """Extract text from PDF bytes, returning list of page texts."""
+    reader = PdfReader(io.BytesIO(contents))
     chunks = []
-    with pdfplumber.open(io.BytesIO(contents)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                chunks.append(text.strip())
+    for page in reader.pages:
+        text = page.extract_text()
+        if text and text.strip():
+            chunks.append(text.strip())
     return chunks

@@ -1,6 +1,8 @@
 version: '3.8'
 
 services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   db:
     image: postgres:15-alpine
     container_name: complianceai_postgres
@@ -10,10 +12,16 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-Asya1234}
       POSTGRES_DB: ${DB_DATABASE:-dbcomplianceai}
     ports:
-      - "${DB_PORT:-5433}:5432"
+      - "5434:5432"          # 5434 host → 5432 container (ThinkCode 5433 kullanıyor)
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-asya} -d ${DB_DATABASE:-dbcomplianceai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
+  # ── pgAdmin ─────────────────────────────────────────────────────────────────
   pgadmin:
     image: dpage/pgadmin4
     container_name: complianceai_pgadmin
@@ -22,9 +30,44 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-123}
     ports:
-      - "${PGADMIN_HOST_PORT:-5050}:80"
+      - "5051:80"            # 5051 host (ThinkCode 5050 kullanıyor)
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+
+  # ── Backend (FastAPI) ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: complianceai_backend
+    restart: always
+    env_file: .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+    ports:
+      - "8001:8000"          # 8001 host (ThinkCode 8000 kullanıyor)
+    volumes:
+      - ./data:/app/data                          # YÖK PDF'leri
+      - ./experiment_outputs:/app/experiment_outputs  # CSV sonuçlar
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Frontend (React + Vite) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend/complianceai
+      dockerfile: Dockerfile
+    container_name: complianceai_frontend
+    restart: always
+    environment:
+      VITE_API_URL: http://localhost:8001
+    ports:
+      - "3000:80"            # 3000 host (ThinkCode 8080 kullanıyor)
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
