@@ -153,7 +153,7 @@ export default function YokMevzuat() {
           </button>
           <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:border-primary hover:text-primary transition-all">
-            <ExternalLink size={14} /> Resmi Site
+            <ExternalLink size={14} /> YÖK Resmi Site
           </a>
         </div>
       </div>

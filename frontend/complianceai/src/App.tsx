@@ -7,7 +7,6 @@ import FileUpload from './pages/FileUpload';
 import ComplianceAnalysis from './pages/ComplianceAnalysis';
 import RAGExperiments from './pages/RAGExperiments';
 import KnowledgePortal from './pages/KnowledgePortal';
-import Reports from './pages/Reports';
 import Landing from './pages/Landing';
 import AdminDashboard from './pages/AdminDashboard';
 import YokMevzuat from './pages/YokMevzuat';
@@ -35,7 +34,6 @@ export default function App() {
             <Route path="experiments" element={<RAGExperiments />} />
             <Route path="portal" element={<KnowledgePortal />} />
             <Route path="mevzuat" element={<YokMevzuat />} />
-            <Route path="reports" element={<Reports />} />
             <Route path="admin" element={<ProtectedRoute adminOnly><AdminDashboard /></ProtectedRoute>} />
           </Route>
         </Routes>

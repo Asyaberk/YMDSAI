@@ -206,55 +206,230 @@ def _retrieve_hybrid(query: str, k: int = TOP_K, alpha: float = 0.5) -> List[Dic
     ]
 
 
-# ── LLM Analysis ─────────────────────────────────────────────────────────────
+# ── Article Splitter ──────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = """You are a strict expert auditor in Turkish higher education law and university regulatory compliance.
-You are given a university document/process and relevant YÖK (Higher Education Council) regulation excerpts.
+def _split_articles(text: str) -> List[Dict]:
+    """
+    Splits document text into individual articles.
 
-CRITICAL RULES:
-1. If the document is NOT a university regulation (e.g. homework assignment, research paper, CV, lecture notes, code), you MUST:
-   - Set compliance_score to a value between 5 and 25
-   - Set label to "non-compliant"
-   - Explain clearly in Turkish that this is not a regulatory document
-   - Still identify what was found in the document as articles
+    pypdf extracts PDFs as a continuous text stream — 'Madde X' headings are NOT
+    at the start of lines. Pattern examples from real PDFs:
+      "Amaç ve kapsam Madde 1 – (1) Bu Yönetmeliğin amacı..."
+      "Dayanak Madde 2 - (1) Bu Yönetmelik..."
+      "Tanımlar Madde 3 - (1) Bu Yönetmelikte geçen;"
 
-2. For REAL university regulations, evaluate each article strictly:
-   - Uyumlu: The article directly maps to and satisfies YÖK requirements
-   - Kısmen Uyumlu: The article partially satisfies or is ambiguous
-   - Uyumsuz: The article contradicts or is missing from YÖK requirements
+    Strategy: find every "Madde N –" or "Madde N -" occurrence (anywhere in text),
+    then slice the text between consecutive occurrences.
+    """
+    import re as _re
 
-3. The "similarity" field must reflect how closely the article text matches YÖK excerpts (0.0 = no match, 1.0 = perfect match). Use 0.1-0.3 for irrelevant content.
+    # Primary: "Madde N –" or "Madde N -" (number THEN dash) — most common
+    # Negative lookbehind: must not be preceded by a Turkish letter (avoid mid-word)
+    primary = _re.compile(
+        r'(?<![a-zA-ZğüşıöçĞÜŞİÖÇ])'   # not part of a word
+        r'(Madde|MADDE)\s+'              # keyword
+        r'(\d+(?:[./]\d+)?)'             # article number
+        r'\s*[-\u2013\u2014]',           # dash after number (identifies a heading)
+    )
 
-Respond ONLY with valid JSON in this exact format:
+    # Fallback 1: "MADDE - N" (dash BEFORE number) — some PDF formats
+    fallback = _re.compile(
+        r'(?<![a-zA-ZğüşıöçĞÜŞİÖÇ])'
+        r'(MADDE|Madde)\s*[-\u2013\u2014]\s*'
+        r'(\d+(?:[./]\d+)?)',
+    )
+
+    # Fallback 2: "Madde N (title)" — parenthesis after number
+    paren = _re.compile(
+        r'(?<![a-zA-ZğüşıöçĞÜŞİÖÇ])'
+        r'(Madde|MADDE)\s+'
+        r'(\d+(?:[./]\d+)?)'
+        r'\s*\(',
+    )
+
+    matches = list(primary.finditer(text))
+    use_paren = False
+
+    # Try fallback 1 if primary found fewer than 2
+    if len(matches) < 2:
+        fb = list(fallback.finditer(text))
+        if len(fb) > len(matches):
+            matches = fb
+
+    # Try fallback 2 (paren format) if still fewer than 2
+    if len(matches) < 2:
+        fb2 = list(paren.finditer(text))
+        if len(fb2) > len(matches):
+            matches = fb2
+            use_paren = True
+
+    if len(matches) < 2:
+        # No Madde structure — split into ~500-word sections
+        words = text.split()
+        size = 500
+        sections = []
+        for i in range(0, len(words), size):
+            chunk = " ".join(words[i:i + size])
+            sections.append({
+                "number": f"Bölüm {i // size + 1}",
+                "title":  f"Bölüm {i // size + 1}",
+                "text":   chunk,
+            })
+        print(f"[RagService] No Madde structure found, using {len(sections)} word-sections")
+        return sections
+
+    articles = []
+    for idx, m in enumerate(matches):
+        num_str  = m.group(2)
+        number   = f"Madde {num_str}"
+
+        # ── Title extraction ──────────────────────────────────────────────────
+        if use_paren:
+            # Extract title from parentheses content: "Madde N (title)"
+            paren_start = m.end()  # right after "Madde N ("
+            paren_end   = text.find(')', paren_start)
+            if 0 < paren_end - paren_start < 120:
+                title = text[paren_start:paren_end].strip()[:80]
+            else:
+                title = number
+        else:
+            # ── Title: look BACK in text for the section heading before this Madde ──
+            look_back_start = matches[idx - 1].end() if idx > 0 else 0
+            before_text = text[look_back_start:m.start()].strip()
+            before_clean = _re.sub(r'[\d\s.;,]+$', '', before_text).strip()
+            words_before = before_clean.split()
+            if 1 <= len(words_before) <= 6:
+                title = " ".join(words_before)
+            else:
+                last_sentence = _re.split(r'[.;!?]\s+', before_clean)
+                candidate = last_sentence[-1].strip() if last_sentence else ""
+                title = candidate[:80] if 3 <= len(candidate) <= 80 else number
+
+        # ── Article text: from this Madde to the next ──
+        art_start = m.start()
+        art_end   = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        full_text = text[art_start:art_end].strip()
+
+        # ── Clean: strip trailing page number ──
+        full_text = _re.sub(r'\s+\d{1,3}\s*$', '', full_text).rstrip()
+
+        # ── Clean: strip trailing orphan section heading ──
+        last_period = max(full_text.rfind('. '), full_text.rfind('.\n'), full_text.rfind('. '))
+        if last_period > 0:
+            trailing = full_text[last_period + 1:].strip()
+            if trailing and '.' not in trailing and len(trailing) < 100:
+                full_text = full_text[:last_period + 1].strip()
+
+        if full_text:
+            articles.append({
+                "number": number,
+                "title":  title[:80] if title else number,
+                "text":   full_text,
+            })
+
+    print(f"[RagService] Madde split: {len(articles)} articles detected")
+    return articles
+
+
+
+
+
+# ── Per-article LLM prompt ────────────────────────────────────────────────────
+
+
+ARTICLE_SYSTEM = """Sen Türk yükseköğretim hukuku uzmanı bir denetçisin.
+Sana incelenen bir üniversite yönetmeliğinin TEK BİR MADDESİ ve referans YÖK mevzuat parçaları verilecek.
+
+TEMEL İLKE: Uyumluluk = kelime kelime aynı olmak DEĞİL, YÖK'ün düzenlediği amacı/hükmü karşılamak demektir.
+Üniversiteler YÖK mevzuatını kendi kurumsal dillerine uyarlayabilir. Bu normaldir ve Uyumlu sayılır.
+
+UYUMLULUK TANIMLARI (4 seçenek):
+- Uyumlu: Madde, YÖK'ün düzenlediği konuyu karşılıyor. İfade farklı olsa da aynı amacı güdüyor,
+  YÖK'ün zorunlu kıldıklarını kapsıyor ve hiçbir YÖK hükmüyle çelişmiyor.
+- Kısmen Uyumlu: Madde genel olarak doğru yönde ama: (a) YÖK'ün zorunlu kıldığı spesifik bir unsur
+  eksik, veya (b) belirsiz/muğlak ifadeler YÖK'ün net hükmünü tam karşılamıyor.
+  Sağlanan YÖK parçaları bu maddeyle yalnızca dolaylı ilgiliyse de Kısmen Uyumlu ver.
+- Uyumsuz: Aşağıdaki somut durumlardan biri varsa Uyumsuz ver:
+  (a) YÖK'ün belirlediği sayısal eşik/süre/oran belge maddesinde farklıysa (örn: YÖK 8 hafta der, belgede 6 hafta);
+  (b) YÖK'ün zorunlu kıldığı bir onay makamı/prosedür belgede hiç yoksa (örn: YÖK Senatoyu zorunlu kılar, belgede belirtilmemiş);
+  (c) YÖK'ün yasakladığı bir uygulama belgede yapılıyorsa;
+  (d) YÖK'ün tanımladığı hak/koruma belgede kısıtlanmış veya tamamen eksikse.
+  NOT: Farklı ifade veya eksik detay tek başına Uyumsuz DEĞİLDİR — o durumda Kısmen Uyumlu.
+- Kapsam Dışı: YALNIZCA şu iki durumda kullan:
+  (1) Bu konu YÖK mevzuatının hiçbir bölümünde düzenlenmemiş; üniversitenin tamamen serbest bırakıldığı
+      idari/organizasyonel bir konudur (örn: kampüs güvenlik prosedürleri, yemekhane yönetimi,
+      ders gruplarının fiziksel bölünmesi, dahili idari toplantı takvimi).
+  (2) Madde yalnızca geçici/geçiş hükmü içeriyor ve kalıcı bir YÖK standardıyla çelişmiyorsa.
+  ÖNEMLI: Sağlanan YÖK parçaları alakasız görünse bile, konu aşağıdaki başlıklardan biriyse
+  Kapsam Dışı VERMEK YASAKTIR — Kısmen Uyumlu ver:
+  Sınav, not sistemi, GANO/YANO/AGNO, ders kaydı, kayıt dondurma, mezuniyet, burs, disiplin,
+  akademik takvim, ders programı, kredi sistemi, öğrenci kabulü, muafiyet, intibak, çift anadal/yandal.
+
+ÇIKTI: Yalnızca şu JSON formatında cevap ver (başka metin ekleme):
 {
-  "compliance_score": <integer 0-100>,
+  "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz|Kapsam Dışı>",
+  "similarity": <0.0 ile 1.0 arası float — anlam örtüşmesi, ifade benzerliği değil>,
+  "yok_reference": "<ilgili YÖK mevzuat adı ve maddesi; hiç bulamazsan boş string>",
+  "yok_text": "<SAĞLANAN YÖK PARÇALARINDAN doğrudan alıntı: en alakalı tek cümleyi kelimesi kelimesine kopyala>",
+  "reasoning": [
+    "<neden bu status: belgede ne diyor, YÖK ne diyor, ikisi aynı amacı karşılıyor mu?>",
+    "<varsa eksiklik veya çelişki; yoksa neden uyumlu sayıldı>"
+  ],
+  "suggestion": "<YALNIZCA Kısmen Uyumlu/Uyumsuz ise: üniversite yönetmeliğinin bu maddesinde ne değiştirilmeli/eklenmeli? 'Bu maddede X ifadesi Y olarak değiştirilmeli' formatında. Uyumlu ise boş string>"
+}
+
+KRİTİK KURALLAR:
+- Farklı ifade = UYUMSUZ demek DEĞİLDİR. Anlam aynıysa Uyumlu ver.
+- yok_reference alanına bir YÖK mevzuatı adı yazabiliyorsan, "Kapsam Dışı" veremezsin.
+- Sağlanan YÖK parçaları bu maddeyle dolaylı ilgiliyse: similarity 0.2-0.4 ile Kısmen Uyumlu ver.
+- yok_text: Mutlaka SAĞLANAN YÖK PARÇALARINDAN al. Kendi yorumunu yazma.
+- suggestion: Üniversite belgesinde yapılacak değişikliği yaz, YÖK'teki değişikliği değil.
+"""
+
+ARTICLE_USER = """## İncelenen Üniversite Yönetmeliği Maddesi
+{article_text}
+
+## Referans YÖK Mevzuat Parçaları (Tek Doğru Kaynak)
+{chunks}
+
+JSON analiz yap."""
+
+
+DOCUMENT_SYSTEM = """Sen Türk yükseköğretim hukuku uzmanı bir denetçisin.
+Sana bir üniversite belgesi verilecek. Belge bir üniversite yönetmeliği DEĞİLSE (örneğin ödev, araştırma makalesi, kod dosyası),
+compliance_score'u 5-25 arasında ver ve bunu açıkla.
+
+ÇIKTI — Yalnızca JSON:
+{
+  "compliance_score": <0-100 tam sayı>,
   "label": "<compliant|partial|non-compliant>",
-  "explanation": "<Turkish explanation, 3-4 sentences>",
+  "explanation": "<Türkçe 2-3 cümle genel değerlendirme>",
   "articles": [
     {
-      "number": "<Article reference, e.g. Madde 1>",
-      "title": "<Short descriptive title in Turkish>",
+      "number": "<Madde numarası>",
+      "title": "<Türkçe başlık>",
       "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz>",
       "similarity": <float 0.0-1.0>,
-      "text": "<Exact text from the submitted document (max 300 chars)>",
-      "yok_reference": "<YÖK regulation name and article>",
-      "yok_text": "<Exact relevant YÖK excerpt (max 300 chars)>",
-      "reasoning": ["<specific reason 1>", "<specific reason 2>"],
-      "suggestion": "<Concrete improvement suggestion in Turkish if non-compliant, else empty string>"
+      "text": "<belgeden alıntı, max 300 karakter>",
+      "yok_reference": "<YÖK mevzuat adı>",
+      "yok_text": "<YÖK alıntısı, max 300 karakter>",
+      "reasoning": ["<gerekçe>"],
+      "suggestion": "<önerim veya boş string>"
     }
   ]
 }
+Eşik: compliant>=80, partial 40-79, non-compliant<40."""
 
-Label thresholds: compliant >= 80, partial 40-79, non-compliant < 40."""
-
-USER_TEMPLATE = """## University Document
+DOCUMENT_USER = """## Belge
 {process_text}
 
-## Relevant YÖK Regulation Excerpts
+## YÖK Mevzuat Parçaları
 {chunks}
 
-Provide your JSON compliance analysis."""
+JSON compliance analizi yap."""
 
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _format_chunks(chunks: List[Dict]) -> str:
     return "\n\n".join(
@@ -273,32 +448,36 @@ def _parse_json(raw: str) -> Optional[Dict]:
         return None
 
 
-# ── Public API ────────────────────────────────────────────────────────────────
+def _score_from_articles(articles: List[Dict]) -> int:
+    """
+    Compute compliance score from real article results.
+    'Kapsam Dışı' articles are EXCLUDED from calculation — they don't
+    reflect non-compliance, just topics YÖK doesn't regulate.
+    Only Uyumlu / Kısmen Uyumlu / Uyumsuz count toward the score.
+    """
+    scorable = [a for a in articles if a.get("status") != "Kapsam Dışı"]
+    if not scorable:
+        return 100  # all articles are out-of-scope → no violations
+    weights = {"Uyumlu": 100, "Kısmen Uyumlu": 60, "Uyumsuz": 0}
+    total = sum(weights.get(a.get("status", "Kısmen Uyumlu"), 60) for a in scorable)
+    return round(total / len(scorable))
 
-def _assign_real_similarities(articles: list, retrieved: list) -> list:
-    """Override LLM-guessed similarity (often 1.0) with real retrieval scores."""
-    if not retrieved:
-        return articles
-    # Normalize BM25/FAISS scores to 0-1 range
-    raw_scores = [c.get("score", 0) for c in retrieved]
-    max_s = max(raw_scores) if raw_scores else 1.0
-    min_s = min(raw_scores) if raw_scores else 0.0
-    rng   = max_s - min_s if max_s != min_s else 1.0
-    norm_scores = [(s - min_s) / rng for s in raw_scores]
-    avg_norm = sum(norm_scores) / len(norm_scores) if norm_scores else 0.5
 
-    for i, art in enumerate(articles):
-        llm_sim = art.get("similarity", 1.0)
-        # If LLM says 1.0 exactly, it's a guess — replace with real score
-        if llm_sim >= 0.99:
-            art["similarity"] = round(avg_norm, 3)
-    return articles
+def _label_from_score(score: int) -> str:
+    if score >= 80:
+        return "compliant"
+    if score >= 40:
+        return "partial"
+    return "non-compliant"
 
+
+# ── Public API ─────────────────────────────────────────────────────────────────
 
 class RagService:
     """
     Real RAG-based compliance analysis service.
     Uses hybrid retrieval (BM25 + FAISS dense) + GPT for generation.
+    Supports per-article analysis to handle large documents fully.
     """
 
     def __init__(self, pipeline: str = "hybrid", model: str = "gpt-4o-mini"):
@@ -320,74 +499,140 @@ class RagService:
         )
         return response.data[0].embedding
 
+    def _analyze_article(self, article: Dict) -> Dict:
+        """Analyze a single article with its own RAG retrieval."""
+        query = article["text"][:500]
+        try:
+            retrieved = self._retrieve(query, k=8)
+        except Exception:
+            retrieved = []
+
+        chunks_str = _format_chunks(retrieved) if retrieved else "İlgili mevzuat parçası bulunamadı."
+
+        try:
+            resp = _oa_client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": ARTICLE_SYSTEM},
+                    {"role": "user", "content": ARTICLE_USER.format(
+                        article_text=article["text"][:4000],  # full article, no artificial cut
+                        chunks=chunks_str[:4000],
+                    )},
+                ],
+                temperature=0.0,
+                max_tokens=1000,
+                response_format={"type": "json_object"},
+            )
+            result = _parse_json(resp.choices[0].message.content)
+        except Exception as e:
+            print(f"[RagService] article LLM error: {e}")
+            result = None
+
+        if not result:
+            result = {
+                "status": "Kısmen Uyumlu",
+                "similarity": 0.5,
+                "yok_reference": "",
+                "yok_text": "",
+                "reasoning": ["Analiz tamamlanamadı."],
+                "suggestion": "",
+            }
+
+        # Merge article metadata with LLM result
+        return {
+            "number":        article["number"],
+            "title":         article["title"],
+            "status":        result.get("status", "Kısmen Uyumlu"),
+            "similarity":    float(result.get("similarity", 0.5)),
+            "text":          article["text"],         # full article text, no cut
+            "yok_reference": result.get("yok_reference", ""),
+            "yok_text":      result.get("yok_text", ""),  # full YÖK text from LLM
+            "reasoning":     result.get("reasoning", []),
+            "suggestion":    result.get("suggestion", ""),
+        }
+
     def analyze_document(self, process_text: str, filename: str) -> dict:
         """
         Full RAG compliance analysis.
-        Returns status, compliance_score, articles, retrieved_chunks, pipeline, model.
+        Splits document into real articles and analyzes each one independently.
+        Score is computed from actual article results, not LLM guess.
         """
-        query = process_text[:500]
+        # 1. Split document into articles
+        split_articles = _split_articles(process_text)
+        print(f"[RagService] Found {len(split_articles)} articles/sections in document")
 
-        # 1. Retrieve relevant YÖK chunks
-        try:
-            retrieved = self._retrieve(query, TOP_K)
-        except Exception as e:
-            print(f"[RagService] Retrieval error: {e}")
-            retrieved = []
+        all_retrieved: List[Dict] = []
 
-        # 2. LLM analysis
-        chunks_str = _format_chunks(retrieved) if retrieved else "Hiçbir mevzuat parçası bulunamadı."
+        # 2. If document has clear article structure → per-article RAG
+        if split_articles:
+            analyzed_articles = []
+            for art in split_articles:
+                result = self._analyze_article(art)
+                analyzed_articles.append(result)
+                # Collect retrieved chunks for logging
+                try:
+                    chunks = self._retrieve(art["text"][:300], k=3)
+                    all_retrieved.extend(chunks)
+                except Exception:
+                    pass
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": USER_TEMPLATE.format(
-                    process_text=process_text[:4000],
-                    chunks=chunks_str[:8000],
-                ),
-            },
-        ]
+            # 3. Compute score from real article results
+            score = _score_from_articles(analyzed_articles)
+            label = _label_from_score(score)
+            label_map = {"compliant": "Uyumlu", "partial": "Kısmen Uyumlu", "non-compliant": "Uyumsuz"}
+            turkish_status = label_map[label]
 
-        try:
-            resp   = _oa_client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.0,
-                max_tokens=3000,
-                response_format={"type": "json_object"},
-            )
-            raw    = resp.choices[0].message.content
-            result = _parse_json(raw)
-        except Exception as e:
-            print(f"[RagService] LLM error: {e}")
-            result = None
+        else:
+            # Fallback: whole-document analysis (no Madde structure)
+            try:
+                retrieved = self._retrieve(process_text[:500], TOP_K)
+                all_retrieved = retrieved
+            except Exception:
+                retrieved = []
 
-        # 3. Fallback
-        if not result:
-            avg_score = int(np.mean([c.get("score", 0.5) for c in retrieved]) * 100) if retrieved else 50
-            result = {
-                "compliance_score": avg_score,
-                "label": "partial",
-                "explanation": "Analiz tamamlanamadı, lütfen tekrar deneyin.",
-                "articles": [],
-            }
+            chunks_str = _format_chunks(retrieved) if retrieved else "İlgili mevzuat parçası bulunamadı."
+            try:
+                resp = _oa_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": DOCUMENT_SYSTEM},
+                        {"role": "user", "content": DOCUMENT_USER.format(
+                            process_text=process_text[:6000],
+                            chunks=chunks_str[:6000],
+                        )},
+                    ],
+                    temperature=0.0,
+                    max_tokens=4000,
+                    response_format={"type": "json_object"},
+                )
+                fallback_result = _parse_json(resp.choices[0].message.content)
+            except Exception as e:
+                print(f"[RagService] fallback LLM error: {e}")
+                fallback_result = None
 
-        # 4. Fix similarity scores (replace LLM-guessed 1.0 with real scores)
-        articles = result.get("articles", [])
-        articles = _assign_real_similarities(articles, retrieved)
+            if fallback_result:
+                analyzed_articles = fallback_result.get("articles", [])
+                score = _score_from_articles(analyzed_articles) if analyzed_articles else fallback_result.get("compliance_score", 50)
+                label = fallback_result.get("label", "partial")
+                label_map = {"compliant": "Uyumlu", "partial": "Kısmen Uyumlu", "non-compliant": "Uyumsuz"}
+                turkish_status = label_map.get(label, "Kısmen Uyumlu")
+            else:
+                analyzed_articles = []
+                score = 50
+                turkish_status = "Kısmen Uyumlu"
 
-        # 5. Map label to Turkish
-        label_map = {
-            "compliant":     "Uyumlu",
-            "partial":       "Kısmen Uyumlu",
-            "non-compliant": "Uyumsuz",
-        }
-        turkish_status = label_map.get(result.get("label", "partial"), "Kısmen Uyumlu")
+        # Deduplicate retrieved chunks
+        seen = set()
+        unique_retrieved = []
+        for c in all_retrieved:
+            if c["chunk_id"] not in seen:
+                seen.add(c["chunk_id"])
+                unique_retrieved.append(c)
 
         return {
             "status":           turkish_status,
-            "compliance_score": result.get("compliance_score", 50),
-            "articles":         articles,
+            "compliance_score": score,
+            "articles":         analyzed_articles,
             "retrieved_chunks": [
                 {
                     "chunk_id": c["chunk_id"],
@@ -395,7 +640,7 @@ class RagService:
                     "source":   c.get("source", ""),
                     "text":     c.get("text", "")[:400],
                 }
-                for c in retrieved
+                for c in unique_retrieved[:20]
             ],
             "pipeline": self.pipeline,
             "model":    self.model,
@@ -404,3 +649,4 @@ class RagService:
 
 # Module-level singleton
 rag_service = RagService(pipeline="hybrid", model="gpt-4o-mini")
+

@@ -113,9 +113,9 @@ export default function Landing() {
               transition={{ duration: 0.6 }}
               className="space-y-10"
             >
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold uppercase tracking-widest">
-                <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-                Üniversiteler İçin AI Denetim
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold uppercase tracking-widest">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                YÖK Mevzuatına Uyum · Yapay Zeka Destekli
               </div>
               <h1 className="text-6xl lg:text-8xl font-medium tracking-tight leading-[0.95] text-slate-900">
                 Mevzuat Denetiminde <br/>
@@ -127,7 +127,9 @@ export default function Landing() {
                 </span>
               </h1>
               <p className="text-xl text-slate-500 max-w-lg leading-relaxed">
-                Üniversite yönetmelik taslaklarını YÖK çerçeve kanunlarıyla saniyeler içinde analiz edin, riskleri raporlayın ve düzeltme önerileri alın.
+                YÜKSEKÖĞRETİM KURULU mevzuatıyla uyum artık elle takip edilmiyor.
+                Üniversite yönetmelik taslaklarınızı madde madde analiz edin,
+                uyumsuzlukları anında görün, somut düzeltme önerileri alın.
               </p>
               
               <div className="flex flex-wrap gap-4 pt-4">
@@ -234,10 +236,9 @@ export default function Landing() {
         <section id="ozellikler" className="py-32 px-8 bg-slate-50">
           <div className="max-w-7xl mx-auto space-y-24">
             <div className="text-center max-w-2xl mx-auto space-y-4">
-              <h2 className="text-4xl font-medium tracking-tight text-slate-900">Hukuki Süreçleriniz İçin Tek Platform</h2>
-              <p className="text-lg text-slate-500">Mevzuat değişikliklerini manuel takip etme zahmetinden kurtulun. ComplianceAI her şeyi sizin için analiz eder.</p>
+              <h2 className="text-4xl font-medium tracking-tight text-slate-900">YÖK Uyumu İçin Tek Platform</h2>
+              <p className="text-lg text-slate-500">Mevzuat değişikliklerini manuel takip etme zahmetinden kurtulun. YMDS AI, YÖK mevzuatını referans alarak her şeyi sizin için analiz eder.</p>
             </div>
-
             <div className="grid md:grid-cols-3 gap-12 text-center">
                {features.map((f, i) => (
                  <div key={i} className="space-y-6 group">
@@ -249,6 +250,207 @@ export default function Landing() {
                  </div>
                ))}
             </div>
+          </div>
+        </section>
+
+        {/* YÖK Stats Banner */}
+        <section className="py-12 px-8 bg-primary">
+          <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-center text-white">
+            {[
+              { value: '9+', label: 'YÖK Mevzuatı' },
+              { value: '300+', label: 'Kapsanan Madde' },
+              { value: '4', label: 'Uyum Kategorisi' },
+              { value: 'GPT-4o', label: 'Analiz Motoru' },
+            ].map((s, i) => (
+              <div key={i}>
+                <p className="text-4xl font-bold">{s.value}</p>
+                <p className="text-white/60 text-sm mt-1 font-medium uppercase tracking-widest">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Nasıl Çalışır? */}
+        <section id="nasil-calisir" className="py-32 px-8 bg-white">
+          <div className="max-w-5xl mx-auto">
+            <div className="text-center space-y-4 mb-20">
+              <h2 className="text-4xl font-medium tracking-tight text-slate-900">Nasıl Çalışır?</h2>
+              <p className="text-lg text-slate-500">Belgenizi yükleyin, yapay zeka geri kalanını halleder.</p>
+            </div>
+            <div className="space-y-6">
+              {[
+                {
+                  step: '01',
+                  color: 'bg-primary/8 border-primary/20',
+                  title: 'Belgenizi Yükleyin',
+                  desc: 'Üniversite yönetmelik taslağınızı PDF formatında sisteme yükleyin. YMDS AI belgeyi otomatik tanır ve işleme hazırlar.',
+                  detail: 'Desteklenen format: PDF · Maksimum boyut: 50 MB · İşlem süresi: ~30 saniye',
+                },
+                {
+                  step: '02',
+                  color: 'bg-academic/8 border-academic/20',
+                  title: 'Otomatik Madde Tespiti',
+                  desc: '"MADDE X —" kalıbıyla PDF\'teki her madde ayrıştırılır. Madde başlıkları ve içerikleri tam ve bütünlüklü şekilde çıkarılır; hiçbir paragraf kesilmez.',
+                  detail: 'Kapsanan maddeler: Numaralı maddeler · Ek maddeler · Geçici maddeler',
+                },
+                {
+                  step: '03',
+                  color: 'bg-warning/8 border-warning/20',
+                  title: 'YÖK Mevzuatıyla Karşılaştırma',
+                  desc: 'Her madde için YÖK vektör veritabanında anlamlı parçalar aranır. BM25 + semantik arama hibrid pipeline\'ı ilgili YÖK hükümlerini doğrulukla getirir.',
+                  detail: 'Karşılaştırılan mevzuat: 9+ YÖK kaynağı · ~300 madde · GPT-4o analizi',
+                },
+                {
+                  step: '04',
+                  color: 'bg-success/8 border-success/20',
+                  title: 'Uyumluluk Raporu & Öneriler',
+                  desc: 'Her madde 4 kategoriden biriyle etiketlenir: Uyumlu, Kısmen Uyumlu, Uyumsuz veya Kapsam Dışı. Uyumsuz maddeler için somut düzeltme önerileri üretilir.',
+                  detail: 'Çıktı: Genel uyum skoru · Madde bazlı analiz · Düzeltme önerileri',
+                },
+              ].map((item, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.1 }}
+                  className={`flex gap-8 p-8 rounded-3xl border ${item.color} hover:shadow-lg transition-all duration-300`}
+                >
+                  <div className="shrink-0 w-14 text-right">
+                    <span className="text-5xl font-black text-slate-200 leading-none">{item.step}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
+                    <p className="text-slate-600 leading-relaxed">{item.desc}</p>
+                    <p className="text-xs font-medium text-slate-400 pt-2">{item.detail}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* YÖK Mevzuat Kapsamı */}
+        <section className="py-32 px-8 bg-slate-50">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center space-y-4 mb-16">
+              <h2 className="text-4xl font-medium tracking-tight text-slate-900">YÖK Mevzuat Kapsamı</h2>
+              <p className="text-lg text-slate-500">YMDS AI bu YÖK kaynakları referans alınarak uyumu değerlendirir.</p>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[
+                { title: '2547 Sayılı Yükseköğretim Kanunu', tag: 'Kanun', icon: '📜' },
+                { title: 'Lisansüstü Eğitim ve Öğretim Yönetmeliği', tag: 'Yönetmelik', icon: '🎓' },
+                { title: 'Öğrenci Disiplin Yönetmeliği', tag: 'Yönetmelik', icon: '⚖️' },
+                { title: 'Yatay Geçiş Yönetmeliği', tag: 'Yönetmelik', icon: '🔄' },
+                { title: 'Çift Anadal ve Yandal Yönetmeliği', tag: 'Yönetmelik', icon: '📚' },
+                { title: 'Uzaktan Öğretim Yönetmeliği', tag: 'Yönetmelik', icon: '💻' },
+                { title: 'Mali ve İdari Esaslar', tag: 'Kılavuz', icon: '💰' },
+                { title: 'Yurt İçi Burslar Yönetmeliği', tag: 'Yönetmelik', icon: '🏅' },
+                { title: 'Ek Madde ve Geçici Hükümler', tag: 'Diğer', icon: '📋' },
+              ].map((m, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.4, delay: i * 0.05 }}
+                  className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-300 flex items-start gap-4"
+                >
+                  <span className="text-2xl shrink-0">{m.icon}</span>
+                  <div>
+                    <p className="font-medium text-slate-800 text-sm leading-snug">{m.title}</p>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary/70 mt-1 inline-block">{m.tag}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Teknoloji */}
+        <section id="teknoloji" className="py-32 px-8 bg-slate-950 text-white">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center space-y-4 mb-20">
+              <h2 className="text-4xl font-medium tracking-tight">Arkada Ne Var?</h2>
+              <p className="text-lg text-white/50">YMDS AI, akademik düzeyde geliştirilmiş bir RAG pipeline'ı kullanır.</p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                {
+                  icon: '📄',
+                  title: 'Akıllı PDF Ayrıştırma',
+                  bullets: [
+                    'pypdf ile sayfa bazlı metin çıkarımı',
+                    'Sayfa numarası ve başlık gürültüsü temizleme',
+                    '"Madde X –" regex ile madde sınırı tespiti',
+                    'Madde başlıkları section heading\'den alınır',
+                  ]
+                },
+                {
+                  icon: '🔍',
+                  title: 'Hibrid RAG Arama',
+                  bullets: [
+                    'BM25 keyword arama (lexical matching)',
+                    'OpenAI text-embedding-3-small vektörler',
+                    'FAISS dense retrieval indexi',
+                    'Her madde için ayrı Top-K sorgu',
+                  ]
+                },
+                {
+                  icon: '🧠',
+                  title: 'GPT-4o Analiz Motoru',
+                  bullets: [
+                    'Niyet bazlı uyumluluk değerlendirmesi',
+                    '4 kategori: Uyumlu / Kısmen / Uyumsuz / Kapsam Dışı',
+                    'YÖK metninden doğrudan alıntı çıkarımı',
+                    'Belgeye özel düzeltme önerisi üretimi',
+                  ]
+                },
+              ].map((tech, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: i * 0.15 }}
+                  className="bg-white/5 border border-white/10 rounded-3xl p-8 space-y-5 hover:bg-white/8 transition-all"
+                >
+                  <div className="text-4xl">{tech.icon}</div>
+                  <h3 className="text-xl font-bold">{tech.title}</h3>
+                  <ul className="space-y-3">
+                    {tech.bullets.map((b, j) => (
+                      <li key={j} className="flex items-start gap-3 text-sm text-white/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              ))}
+            </div>
+            <div className="mt-16 flex flex-wrap items-center justify-center gap-3 text-sm">
+              {['PDF Yükleme', '→', 'Madde Ayrımı', '→', 'YÖK Retrieval', '→', 'GPT-4o Analiz', '→', 'Uyum Skoru'].map((s, i) => (
+                s === '→'
+                  ? <span key={i} className="text-white/30 text-lg">{s}</span>
+                  : <span key={i} className="px-4 py-2 bg-white/10 border border-white/15 rounded-xl font-medium text-white/80">{s}</span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="py-24 px-8 bg-white text-center">
+          <div className="max-w-2xl mx-auto space-y-8">
+            <h2 className="text-4xl font-medium tracking-tight text-slate-900">YÖK Uyumunu Güvence Altına Alın</h2>
+            <p className="text-lg text-slate-500">Üniversitenizin yönetmelik süreçlerini dijitalleştirin. Hukuki riskler fark edilmeden önce gelin.</p>
+            <button
+              onClick={() => switchMode('register')}
+              className="px-10 py-5 rounded-2xl bg-primary text-white font-bold text-lg flex items-center gap-3 shadow-2xl shadow-primary/30 hover:scale-[1.02] transition-all mx-auto"
+            >
+              Ücretsiz Başlayın <ArrowRight size={22} />
+            </button>
+            <p className="text-xs text-slate-400">Kredi kartı gerekmez · Anında erişim · Türkçe destek</p>
           </div>
         </section>
       </main>

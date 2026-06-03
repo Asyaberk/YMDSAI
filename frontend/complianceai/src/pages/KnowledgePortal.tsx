@@ -349,7 +349,7 @@ export default function KnowledgePortal() {
                       {msg.sources && msg.sources.length > 0 && (
                         <div className="pt-3 border-t border-slate-100">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                            <BookOpen size={10} /> Mevzuat Kaynakları
+                            <BookOpen size={10} /> YÖK Mevzuat Kaynakları
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {msg.sources.map((src, i) => (

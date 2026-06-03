@@ -340,7 +340,7 @@ export default function FileUpload() {
                 className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex gap-3">
                 <AlertCircle size={20} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-[11px] text-amber-700 font-medium leading-relaxed">
-                  Belge YÖK mevzuat veritabanında taranıyor. Pipeline: <strong>{pipeline.toUpperCase()}</strong>, Model: <strong>{model}</strong>. 15–45 saniye sürebilir.
+                  Belge YÖK mevzuat veritabanında taranıyor. Pipeline: <strong>{pipeline.toUpperCase()}</strong>, Model: <strong>{model}</strong>. 90–180 saniye sürebilir.
                 </p>
               </motion.div>
             )}

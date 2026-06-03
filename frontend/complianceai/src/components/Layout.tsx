@@ -6,7 +6,6 @@ import {
   FileSearch, 
   FlaskConical, 
   Search, 
-  BarChart3, 
   ShieldCheck,
   Circle,
   Settings,
@@ -38,13 +37,12 @@ export default function Layout() {
     { name: 'Belge Yükle',       path: '/upload',    icon: Upload,          desc: 'Analiz edilmesini istediğiniz üniversite yönetmelik taslaklarını sisteme yükleyin.' },
     { name: 'Uyumluluk Analizleri', path: '/analysis',  icon: FileSearch,      desc: 'Yüklenen belgelerinizi listeleyin, inceleyin, silin veya madde madde YÖK uyum analizini görün.' },
     { name: 'Bilgi Portalı',     path: '/portal',    icon: Search,          desc: 'Mevzuat hakkındaki sorularınızı yapay zekaya sorun, yasal dayanaklı cevaplar alın.' },
-    { name: 'YÖK Mevzuatı',      path: '/mevzuat',   icon: Scale,           desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, resmi kaynaklara ulaşın.' },
+    { name: 'YÖK Mevzuatı',      path: '/mevzuat',   icon: Scale,           desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, dayanak mevzuatlara ulaşın.' },
   ];
 
   const adminNavItems = [
     { name: 'Yönetim Paneli', path: '/admin', icon: Settings, desc: 'Sisteme referans olacak YÖK mevzuatlarını ve kullanıcı yetkilerini yönetin.' },
     { name: 'RAG Karşılaştırma', path: '/experiments', icon: FlaskConical, desc: 'Farklı yapay zeka modellerinin performansını deneysel olarak karşılaştırın.' },
-    { name: 'Raporlar', path: '/reports', icon: BarChart3, desc: 'Geçmiş analizleri ve uyumluluk trendlerini detaylı raporlar halinde inceleyin.' },
   ];
 
   const navItems = user?.role === 'ADMIN' ? [...userNavItems, ...adminNavItems] : userNavItems;
@@ -136,22 +134,22 @@ export default function Layout() {
         {/* Top Header/Helper Bar */}
         <header className={cn(
           "h-20 backdrop-blur-md border-b sticky top-0 z-30 px-8 flex items-center justify-between transition-colors duration-300",
-          location.pathname === '/admin' ? "bg-slate-900 border-slate-800 text-white" : "bg-white/80 border-gray-100 text-slate-900"
+          ['/admin', '/experiments'].includes(location.pathname) ? "bg-slate-900 border-slate-800 text-white" : "bg-white/80 border-gray-100 text-slate-900"
         )}>
            <div className="flex items-center gap-2">
-              <span className={cn("text-sm", location.pathname === '/admin' ? "text-slate-500" : "text-slate-400")}>Dashboard</span>
-              <ChevronRight size={14} className={location.pathname === '/admin' ? "text-slate-700" : "text-slate-300"} />
+              <span className={cn("text-sm", ['/admin', '/experiments'].includes(location.pathname) ? "text-slate-500" : "text-slate-400")}>Dashboard</span>
+              <ChevronRight size={14} className={['/admin', '/experiments'].includes(location.pathname) ? "text-slate-700" : "text-slate-300"} />
               <span className="font-medium text-sm">{currentNavItem?.name}</span>
            </div>
            
            <div className="flex items-center gap-4">
-              {location.pathname !== '/admin' && (
+              {!['/admin', '/experiments'].includes(location.pathname) && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success rounded-full text-xs font-bold border border-success/10">
                    <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
                    Mevzuat Güncel · {new Date().getFullYear()}
                 </div>
               )}
-              {location.pathname === '/admin' && (
+              {['/admin', '/experiments'].includes(location.pathname) && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-academic text-white rounded-full text-[10px] font-bold uppercase tracking-widest">
                    Yönetici Erişimi
                 </div>
@@ -160,7 +158,7 @@ export default function Layout() {
                 onClick={() => setShowHelp(true)}
                 className={cn(
                   "w-10 h-10 flex items-center justify-center rounded-xl transition-all relative group",
-                  location.pathname === '/admin' ? "text-slate-400 hover:bg-white/5" : "text-slate-400 hover:bg-gray-50"
+                  ['/admin', '/experiments'].includes(location.pathname) ? "text-slate-400 hover:bg-white/5" : "text-slate-400 hover:bg-gray-50"
                 )}
               >
                  <Info size={20} />
