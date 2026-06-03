@@ -1,7 +1,7 @@
 <div align="center">
   <br />
-  <h1>⚖️ YMDS AI</h1>
-  <p><strong>YÖK Mevzuatı Denetim Sistemi — Retrieval-Augmented Generation ile Uyumluluk Analizi</strong></p>
+  <h1>YMDS AI</h1>
+  <p><strong>YOK Regulatory Compliance Analysis System powered by Retrieval-Augmented Generation</strong></p>
 
   [![React](https://img.shields.io/badge/React-19.0-61DAFB.svg?logo=react&logoColor=white)](https://react.dev)
   [![Vite](https://img.shields.io/badge/Vite-6.0-646CFF.svg?logo=vite&logoColor=white)](https://vitejs.dev/)
@@ -12,163 +12,165 @@
   [![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o-412991.svg?logo=openai&logoColor=white)](https://openai.com/)
 
   <br />
-  <p><i>Senior Design Project — Bilgi Üniversitesi Bilgisayar Mühendisliği</i></p>
+  <p><i>Senior Design Project — Istanbul Bilgi University, Computer Engineering, 2025–2026</i></p>
 </div>
 
 ---
 
-## 📖 Proje Hakkında
+## About
 
-**YMDS AI** (*YÖK Mevzuatı Denetim Sistemi*), Türk üniversitelerinin iç yönetmeliklerinin **YÖK (Yükseköğretim Kurulu)** mevzuatına uyumluluğunu otomatik olarak denetleyen, **Retrieval-Augmented Generation (RAG)** mimarisi üzerine kurulu bir yapay zeka platformudur.
+**YMDS AI** (*YOK Mevzuati Denetim Sistemi* — Higher Education Regulatory Compliance System) is an AI-powered platform that automatically checks whether Turkish university internal policy documents comply with regulations set by **YOK (Yuksekogretim Kurulu — the Higher Education Council of Turkey)**.
 
-Sistem, bir üniversite yönetmeliği PDF'i yüklendiğinde belgeyi **madde madde** analiz eder; her madde için ilgili YÖK mevzuatını otomatik olarak çeker, LLM ile karşılaştırır ve 4 kategorili bir uyumluluk kararı üretir. Tüm bu süreç, manuel hukuki incelemenin yerine geçmek için değil, idari personelin analizini hızlandırmak ve odaklanmasını sağlamak amacıyla tasarlanmıştır.
+When a university policy PDF is uploaded, the system splits it into individual articles, retrieves the most relevant YOK regulation passages for each article using one of five RAG pipeline variants, and uses a large language model to produce a four-class compliance verdict. The goal is not to replace human legal review, but to accelerate it by surfacing relevant regulation text and flagging articles that require attention.
 
-Proje aynı zamanda akademik bir araştırma altyapısı olarak 5 farklı RAG pipeline varyantını (No-RAG, BM25, Dense, Hybrid, Multi-Query) 40 soruluk bir benchmark üzerinde karşılaştırır.
+The project also serves as a research platform: five retrieval strategies (No-RAG, BM25, Dense, Hybrid, Multi-Query) are benchmarked against a 40-case evaluation set, with results rendered live in the web interface.
 
 ---
 
-## ✨ Temel Özellikler
+## Key Features
 
-| Özellik | Açıklama |
+| Feature | Description |
 |---|---|
-| 📄 **Madde Bazlı Analiz** | PDF yönetmeliği otomatik olarak `Madde N` başlıklarına göre ayrıştırılır; her madde bağımsız RAG çağrısıyla analiz edilir |
-| ⚖️ **4 Kategorili Karar** | Her madde için: **Uyumlu / Kısmen Uyumlu / Uyumsuz / Kapsam Dışı** kararı + YÖK alıntısı + Türkçe gerekçe + düzeltme önerisi |
-| 🔍 **5 RAG Pipeline** | No-RAG · BM25 · Dense (FAISS) · Hybrid (BM25+Dense linear fusion) · Multi-Query |
-| 📚 **Canlı YÖK Mevzuat Tarayıcı** | `idarimali.yok.gov.tr` portalından güncel mevzuat listesi saatlik önbellekle çekilir |
-| 📊 **Deney Sayfası** | Benchmark sonuçları (doğruluk, gecikme, maliyet, sınıf bazlı recall) doğrudan web arayüzünde görselleştirilir |
-| 👩‍💼 **Admin Dashboard** | Tüm kullanıcıların yüklediği belgeler, uyumluluk istatistikleri, PDF görüntüleme ve silme |
-| 🔐 **JWT Kimlik Doğrulama** | Kullanıcı / Admin rol ayrımı, token tabanlı güvenlik |
-| 🐳 **Docker Compose** | Tek komutla tüm sistem ayağa kalkar (FastAPI + React + PostgreSQL + pgAdmin) |
+| Article-level analysis | Policy PDFs are automatically parsed into individual articles using a multi-pattern regex splitter; each article is analyzed independently |
+| Four-class compliance verdict | Each article receives one of: **Compliant / Partially Compliant / Non-Compliant / Out-of-Scope**, with a YOK citation, Turkish-language reasoning, and a corrective suggestion |
+| Five RAG pipelines | No-RAG, BM25 (sparse), Dense (FAISS), Hybrid (linear score fusion), Multi-Query (LLM query expansion + BM25) |
+| Live YOK regulation browser | Regulation catalogue scraped in real time from the official YOK administrative law portal with hourly caching |
+| Experiment dashboard | Benchmark accuracy, latency, cost, and per-class recall charts rendered directly from experiment output files |
+| Admin dashboard | View all uploaded documents across all users, inspect compliance statistics, open original PDFs, delete records |
+| JWT authentication | Role-based access control: regular user and administrator roles |
+| Docker Compose deployment | Single command brings up the full stack: FastAPI backend + React frontend + PostgreSQL + pgAdmin |
 
 ---
 
-## 🏗️ Sistem Mimarisi
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        YMDS AI                                  │
-│                                                                 │
-│  ┌──────────────┐    ┌──────────────────┐    ┌───────────────┐ │
-│  │  Knowledge   │    │  Inference       │    │  Web          │ │
-│  │  Base Layer  │───▶│  Backend         │◀──▶│  Interface    │ │
-│  │              │    │  (FastAPI)       │    │  (React)      │ │
-│  │ • 9 YÖK PDF  │    │                  │    │               │ │
-│  │ • BM25 Index │    │ • No-RAG         │    │ • Analiz      │ │
-│  │ • FAISS Index│    │ • BM25           │    │ • Madde detay │ │
-│  │ • 248 chunk  │    │ • Dense (FAISS)  │    │ • Admin panel │ │
-│  │              │    │ • Hybrid         │    │ • Deneyler    │ │
-│  └──────────────┘    │ • Multi-Query    │    └───────────────┘ │
-│                      │                  │                       │
-│                      │ GPT-4o / mini    │    ┌───────────────┐ │
-│                      └──────────────────┘    │  PostgreSQL   │ │
-│                                              │  (Belgeler,   │ │
-│  ┌──────────────────────────────────────┐    │   Sonuçlar)   │ │
-│  │  Live YÖK Mevzuat Browser           │    └───────────────┘ │
-│  │  idarimali.yok.gov.tr (1h cache)    │                       │
-│  └──────────────────────────────────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------+
+|                           YMDS AI                                |
+|                                                                  |
+|  +----------------+    +------------------+    +-------------+  |
+|  | Knowledge Base |    | Inference Backend|    | Web         |  |
+|  |                |--->| (FastAPI)        |<-->| Interface   |  |
+|  | - 9 YOK PDFs   |    |                  |    | (React)     |  |
+|  | - BM25 Index   |    | - No-RAG         |    |             |  |
+|  | - FAISS Index  |    | - BM25           |    | - Analysis  |  |
+|  | - 248 chunks   |    | - Dense (FAISS)  |    | - Detail    |  |
+|  |                |    | - Hybrid         |    | - Admin     |  |
+|  +----------------+    | - Multi-Query    |    | - Experiments|  |
+|                        |                  |    +-------------+  |
+|                        | GPT-4o / mini    |                      |
+|                        +------------------+    +-------------+  |
+|                                                | PostgreSQL  |  |
+|  +------------------------------------------+ | (Documents, |  |
+|  | Live YOK Regulation Browser              | |  Results)   |  |
+|  | idarimali.yok.gov.tr  (1h cache)         | +-------------+  |
+|  +------------------------------------------+                   |
++------------------------------------------------------------------+
 ```
 
-### Katmanlar
+### Layer Overview
 
-| Katman | Teknoloji | Açıklama |
+| Layer | Technology | Description |
 |---|---|---|
-| **Knowledge Base** | `rank-bm25`, `faiss-cpu`, `openai` | 9 YÖK PDF → 248 chunk (350 kelime / 59 kelime overlap) → BM25 + FAISS index |
-| **Inference Backend** | FastAPI, Python 3.11, OpenAI API | 5 retrieval pipeline, madde ayrıştırıcı, JSON uyumluluk kararı |
-| **Web Interface** | React 19, Vite 6, TailwindCSS 4 | Analiz, detay, admin dashboard, deney görselleştirme |
-| **Veritabanı** | PostgreSQL 15, SQLAlchemy, Alembic | Belgeler, per-madde analiz sonuçları, kullanıcılar |
+| Knowledge Base | `rank-bm25`, `faiss-cpu`, OpenAI embeddings | 9 YOK PDFs chunked into 248 segments (350 words / 59-word overlap), indexed as BM25 and FAISS flat inner-product |
+| Inference Backend | FastAPI, Python 3.11, OpenAI API | Article boundary detection, retrieval pipeline routing, LLM compliance reasoning |
+| Web Interface | React 19, Vite 6, TailwindCSS 4, Recharts | Analysis, article detail, admin dashboard, experiment visualization |
+| Database | PostgreSQL 15, SQLAlchemy 2.0, Alembic | Documents, per-article analysis results, user accounts |
 
 ---
 
-## 🔬 RAG Pipeline Varyantları
+## RAG Pipeline Variants
 
-| Pipeline | Yöntem | Açıklama |
+| Pipeline | Method | Description |
 |---|---|---|
-| **No-RAG** | Sıfır-shot | Hiç retrieval yok; LLM'e yalnızca madde metni verilir (baseline) |
-| **BM25** | Sparse | Madde metni BM25 indeksine sorgulanır; top-K chunk getirilir |
-| **Dense** | FAISS | `text-embedding-3-small` ile embed edilmiş sorgu, FAISS flat inner-product indeksine verilir |
-| **Hybrid** | Lineer fusion | BM25 + Dense her ikisi 2K derinlikte çalışır, min-max normalize edilir, `0.5×BM25 + 0.5×Dense` birleştirilir |
-| **Multi-Query** | Query expansion | LLM ile 2 alternatif sorgu üretilir; 3 BM25 çağrısının sonuçları birleştirilir |
+| No-RAG | Zero-shot | No retrieval; article text is passed directly to the LLM (baseline) |
+| BM25 | Sparse | Article text is scored against the BM25 index; top-K chunks retrieved |
+| Dense | FAISS | Query embedded with `text-embedding-3-small` (384-dim projection); top-K nearest chunks from FAISS flat index |
+| Hybrid | Linear score fusion | BM25 and Dense each run at depth 2K; scores min-max normalized independently; final score = 0.5 x BM25 + 0.5 x Dense |
+| Multi-Query | Query expansion | LLM generates 2 alternative query phrasings at temperature 0.7; all 3 BM25 results merged by union, re-ranked by score |
 
 ---
 
-## 📊 Araştırma Sonuçları (Özet)
+## Research Results (Summary)
 
-40 soruluk RAG-aware benchmark üzerinde:
+Evaluated on a 40-case RAG-aware benchmark:
 
-| Pipeline | Model | Doğruluk |
+| Pipeline | Model | Accuracy |
 |---|---|---|
-| **Hybrid** | GPT-4o | **%47.5** ← en iyi |
-| BM25 | GPT-4o | %45.0 |
-| Dense | GPT-4o | %40.0 |
-| Multi-Query | GPT-4o | %37.5 |
-| No-RAG | GPT-4o | %37.5 |
-| Hybrid | GPT-4o-mini | %47.5 |
+| Hybrid | GPT-4o | **47.5%** (best) |
+| BM25 | GPT-4o | 45.0% |
+| Hybrid | GPT-4o-mini | 47.5% |
+| Dense | GPT-4o | 40.0% |
+| No-RAG | GPT-4o | 37.5% |
 
-> 💡 **Anahtar bulgu:** GPT-4o-mini, GPT-4o ile eşdeğer doğruluğa ~18× daha düşük maliyetle ulaşıyor. Optimal hiperparametreler: 350 kelimelik chunk, Top-5 retrieval derinliği.
+Key findings:
+- RAG improves accuracy by 10 percentage points over the no-RAG baseline
+- GPT-4o-mini matches GPT-4o performance at approximately 18x lower cost
+- Optimal hyperparameters: 350-word chunks, Top-5 retrieval depth
+- All models systematically under-predict the non-compliant class; the system is best used as a risk filter rather than a standalone auditor
 
-Detaylı sonuçlar ve ablasyon çalışmaları (chunk boyutu, Top-K ablasyonu, sınıf bazlı recall) için uygulamanın **RAG Experiments** sayfasını ya da `experiment_outputs/` klasörünü inceleyin.
+Full ablation results (chunk size, Top-K depth, per-class recall, latency) are available in `experiment_outputs/` and rendered on the application's Experiments page.
 
 ---
 
-## 📁 Proje Yapısı
+## Project Structure
 
 ```
 YMDSAI/
-│
-├── backend/                      # FastAPI backend
-│   ├── api/
-│   │   └── routes.py             # Tüm API endpoint'leri (analiz, auth, yök mevzuat, admin)
-│   ├── services/
-│   │   └── rag_service.py        # 5 pipeline, madde ayrıştırıcı, LLM prompts
-│   ├── models/
-│   │   ├── domain.py             # SQLAlchemy ORM modelleri
-│   │   └── schemas.py            # Pydantic şemaları
-│   ├── db/                       # Veritabanı bağlantısı ve session
-│   ├── core/                     # Konfigürasyon, güvenlik, bağımlılıklar
-│   ├── main.py                   # FastAPI app başlangıcı
-│   └── Dockerfile
-│
-├── frontend/complianceai/        # React + Vite frontend
-│   ├── src/
-│   │   ├── pages/                # Analiz, Admin, Deneyler, Login sayfaları
-│   │   ├── components/           # Yeniden kullanılabilir UI bileşenleri
-│   │   └── api/                  # Backend istek fonksiyonları
-│   └── Dockerfile
-│
-├── fix_experiments/              # Araştırma & benchmark betikleri
-│   ├── run_benchmark_balanced.py # Ana benchmark (5 pipeline × 2 model)
-│   ├── ablation_bm25_fast.py     # Chunk boyutu ve Top-K ablasyonu
-│   ├── prebuild_faiss.py         # FAISS index ön inşası
-│   ├── generate_rag_testset.py   # Gold label üretimi
-│   └── generate_paper_figures.py # Makale görseli üretimi
-│
-├── data/                         # 9 YÖK PDF mevzuat belgesi
-├── experiment_outputs/           # Benchmark CSV çıktıları ve grafikler
-├── uploads/                      # Kullanıcıların yüklediği PDF'ler
-├── docker-compose.yml            # Tüm servisler için Docker Compose
-├── requirements.txt              # Python bağımlılıkları
-└── README.md
+|
++-- backend/                        # FastAPI backend
+|   +-- api/
+|   |   +-- routes.py               # All API endpoints (analysis, auth, YOK browser, admin)
+|   +-- services/
+|   |   +-- rag_service.py          # 5 pipelines, article splitter, LLM prompts
+|   +-- models/
+|   |   +-- domain.py               # SQLAlchemy ORM models
+|   |   +-- schemas.py              # Pydantic schemas
+|   +-- db/                         # Database connection and session management
+|   +-- core/                       # Config, security, dependency injection
+|   +-- main.py                     # FastAPI app entry point
+|   +-- Dockerfile
+|
++-- frontend/complianceai/          # React + Vite frontend
+|   +-- src/
+|   |   +-- pages/                  # Analysis, Admin, Experiments, Login pages
+|   |   +-- components/             # Reusable UI components
+|   |   +-- api/                    # Backend request functions
+|   +-- Dockerfile
+|
++-- fix_experiments/                # Research and benchmarking scripts
+|   +-- run_benchmark_balanced.py   # Main benchmark (5 pipelines x 2 models)
+|   +-- ablation_bm25_fast.py       # Chunk size and Top-K ablation study
+|   +-- prebuild_faiss.py           # FAISS index pre-build
+|   +-- generate_rag_testset.py     # Gold label test set generation
+|   +-- generate_paper_figures.py   # Figure generation for publication
+|
++-- data/                           # 9 YOK regulatory PDF documents
++-- experiment_outputs/             # Benchmark CSV outputs and charts
++-- uploads/                        # User-uploaded policy PDFs
++-- docker-compose.yml              # Full stack Docker Compose config
++-- requirements.txt                # Python dependencies
++-- README.md
 ```
 
 ---
 
-## 🚀 Kurulum ve Çalıştırma
+## Getting Started
 
-### Ön Gereksinimler
+### Prerequisites
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (önerilen)
-- **veya** Python 3.11+ · Node.js 20+ · PostgreSQL 15
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended)
+- or Python 3.11+ / Node.js 20+ / PostgreSQL 15 (manual setup)
 
-### `.env` Dosyasını Oluştur
+### Step 1 — Create the `.env` file
 
-Proje kök dizininde `.env` dosyası oluşturun:
+Create a `.env` file in the project root:
 
 ```env
 # OpenAI
 OPENAI_API_KEY=sk-...
 
-# Veritabanı
+# Database
 DB_HOST=db
 DB_PORT=5432
 DB_USERNAME=asya
@@ -180,47 +182,47 @@ SECRET_KEY=your-secret-key-here
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
 
-# pgAdmin (opsiyonel)
+# pgAdmin (optional)
 PGADMIN_EMAIL=admin@admin.com
 PGADMIN_PASSWORD=123
 ```
 
 ---
 
-### 🐳 Yöntem 1: Docker Compose (Önerilen)
+### Option 1 — Docker Compose (Recommended)
 
 ```bash
-# Tüm servisleri başlat (ilk çalıştırmada image build edilir)
+# Build and start all services
 docker compose up --build
 
-# Arka planda çalıştırmak için
+# Run in detached mode
 docker compose up --build -d
 ```
 
-| Servis | URL |
+| Service | URL |
 |---|---|
-| 🌐 Web Arayüzü | http://localhost:3000 |
-| ⚙️ API (Swagger) | http://localhost:8001/docs |
-| 🗄️ pgAdmin | http://localhost:5051 |
+| Web Application | http://localhost:3000 |
+| API (Swagger UI) | http://localhost:8001/docs |
+| pgAdmin | http://localhost:5051 |
 
 ---
 
-### 🛠️ Yöntem 2: Manuel Kurulum
+### Option 2 — Manual Setup
 
 **Backend:**
 
 ```bash
-# Sanal ortam oluştur ve aktifleştir
+# Create and activate virtual environment
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# Bağımlılıkları yükle
+# Install dependencies
 pip install -r requirements.txt
 
-# Veritabanı tablolarını oluştur
+# Create database tables
 python -c "from backend.db.database import engine; from backend.models.domain import Base; Base.metadata.create_all(engine)"
 
-# Sunucuyu başlat
+# Start server
 uvicorn backend.main:app --reload --port 8000
 ```
 
@@ -232,109 +234,96 @@ npm install
 npm run dev
 ```
 
-> 🌐 Arayüz: http://localhost:3000 | ⚙️ API: http://localhost:8000/docs
+Application: http://localhost:3000 | API docs: http://localhost:8000/docs
 
 ---
 
-## 🧪 Araştırma Deneylerini Çalıştırma
+## Running Experiments
 
-Benchmark betiklerini proje kök dizininde sanal ortam aktifken çalıştırın:
+Run all benchmark scripts from the project root with the virtual environment active:
 
 ```bash
-# 1. FAISS vektör indeksini önceden inşa et (tek seferlik)
+# Step 1 — Pre-build the FAISS vector index (one-time)
 python fix_experiments/prebuild_faiss.py
 
-# 2. Gold label test seti üret
+# Step 2 — Generate the gold label test set
 python fix_experiments/generate_rag_testset.py
 
-# 3. Ana benchmark (5 pipeline × 2 model = 400 LLM çağrısı)
+# Step 3 — Run the main benchmark (5 pipelines x 2 models, ~400 LLM calls)
 python fix_experiments/run_benchmark_balanced.py
 
-# 4. Chunk boyutu ve Top-K ablasyon çalışması
+# Step 4 — Run chunk size and Top-K ablation study
 python fix_experiments/ablation_bm25_fast.py
 
-# 5. Makale görselleri üret (grafik, tablo, ısı haritası)
+# Step 5 — Generate publication-ready figures and charts
 python fix_experiments/generate_paper_figures.py
 ```
 
-> 📈 Tüm çıktılar (CSV, PNG grafikleri) otomatik olarak `experiment_outputs/` klasörüne kaydedilir.
-> Bu sonuçlar web uygulamasının **RAG Experiments** sayfasında canlı olarak görselleştirilir.
+All outputs (CSVs, PNG charts, heatmaps) are saved automatically to `experiment_outputs/`. These results are also displayed live on the application's **Experiments** page.
 
 ---
 
-## 🔑 API Endpoints (Özet)
+## API Reference (Summary)
 
-| Metod | Endpoint | Açıklama |
+| Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/auth/register` | Kullanıcı kaydı |
-| `POST` | `/auth/login` | JWT token alma |
-| `POST` | `/analyze` | PDF yükle → madde bazlı uyumluluk analizi |
-| `GET` | `/documents` | Kullanıcının belgelerini listele |
-| `GET` | `/documents/{id}` | Belge detayı + tüm madde sonuçları |
-| `GET` | `/admin/documents` | Admin: tüm kullanıcıların belgeleri |
-| `GET` | `/yok/mevzuat` | Canlı YÖK mevzuat listesi (1s önbellek) |
-| `GET` | `/experiments/results` | Benchmark CSV sonuçları |
+| `POST` | `/auth/register` | Register a new user |
+| `POST` | `/auth/login` | Obtain a JWT token |
+| `POST` | `/analyze` | Upload a policy PDF and run article-level compliance analysis |
+| `GET` | `/documents` | List the current user's documents |
+| `GET` | `/documents/{id}` | Get document detail with all article results |
+| `GET` | `/admin/documents` | Admin: list all documents across all users |
+| `GET` | `/yok/mevzuat` | Live YOK regulation catalogue (1-hour cache) |
+| `GET` | `/experiments/results` | Benchmark CSV results for the Experiments page |
 
-Tüm endpoint detayları için: **http://localhost:8001/docs** (Swagger UI)
+Full interactive API documentation: **http://localhost:8001/docs**
 
 ---
 
-## 🤖 LLM Prompt ve Karar Mekanizması
+## LLM Compliance Decision Logic
 
-Her madde için LLM şu 4 kategoriden birini döndürür:
+Each article is independently classified into one of four categories:
 
-| Karar | Açıklama |
+| Decision | Criteria |
 |---|---|
-| ✅ **Uyumlu** | Madde, YÖK hükmünü karşılıyor (ifade farklı olsa da) |
-| 🟡 **Kısmen Uyumlu** | Genel doğrultuda ama zorunlu bir unsur eksik ya da belirsiz |
-| ❌ **Uyumsuz** | Sayısal eşik/süre farklı, zorunlu makam eksik veya YÖK'ün yasakladığı bir uygulama var |
-| ⚫ **Kapsam Dışı** | YÖK bu konuyu düzenlemiyor (kampüs güvenliği, yemekhane vb.) |
+| Compliant | Article satisfies the YOK regulation's intent, even if phrased differently |
+| Partially Compliant | Correct direction but a required element is missing or wording is ambiguous |
+| Non-Compliant | Numeric threshold differs, a mandatory authority or procedure is absent, or a prohibited practice is present |
+| Out-of-Scope | Topic is not regulated by YOK at all (e.g., campus security, cafeteria management) |
 
-JSON çıktısı: `status` · `similarity` · `yok_reference` · `yok_text` · `reasoning` · `suggestion`
+JSON output per article: `status` · `similarity` · `yok_reference` · `yok_text` · `reasoning` · `suggestion`
 
-Tam sistem prompt'u `backend/services/rag_service.py` içindeki `ARTICLE_SYSTEM` değişkeninde bulunur.
+The full system prompt is in `backend/services/rag_service.py` (`ARTICLE_SYSTEM` variable).
 
 ---
 
-## 📦 Teknoloji Yığını
+## Technology Stack
 
-| Katman | Teknoloji |
+| Layer | Technology |
 |---|---|
-| **Frontend** | React 19, Vite 6, TailwindCSS 4, Recharts |
-| **Backend** | Python 3.11, FastAPI, Uvicorn |
-| **AI / RAG** | OpenAI API (GPT-4o, GPT-4o-mini, text-embedding-3-small), FAISS, rank-bm25 |
-| **Veritabanı** | PostgreSQL 15, SQLAlchemy 2.0, Alembic |
-| **PDF işleme** | pypdf, regex madde ayrıştırıcı |
-| **HTTP / Scraping** | httpx, BeautifulSoup4 |
-| **Kimlik Doğrulama** | JWT (python-jose), bcrypt |
-| **Deployment** | Docker Compose (4 servis: db · backend · frontend · pgadmin) |
-| **Deneyler** | Pandas, NumPy, Matplotlib, Seaborn |
+| Frontend | React 19, Vite 6, TailwindCSS 4, Recharts |
+| Backend | Python 3.11, FastAPI, Uvicorn |
+| AI / RAG | OpenAI API (GPT-4o, GPT-4o-mini, text-embedding-3-small), FAISS, rank-bm25 |
+| Database | PostgreSQL 15, SQLAlchemy 2.0, Alembic |
+| PDF Processing | pypdf, regex-based article boundary detection |
+| HTTP / Scraping | httpx, BeautifulSoup4 |
+| Authentication | JWT (python-jose), bcrypt |
+| Deployment | Docker Compose (4 services: db, backend, frontend, pgadmin) |
+| Experiments | Pandas, NumPy, Matplotlib, Seaborn |
 
 ---
 
-## 📄 Akademik Makale
+## Contributors
 
-Bu proje, *Expert Systems with Applications* dergisine gönderilen aşağıdaki makaleye dayanmaktadır:
-
-> **YMDS AI: A Retrieval-Augmented Generation Framework for Automated Regulatory Compliance Checking in Turkish Higher Education**  
-> *Asya Berk, Utku ...*  
-> Bilgi Üniversitesi, 2026
-
-Makale `paper/` klasöründe LaTeX kaynak dosyaları olarak mevcuttur.
-
----
-
-## 👥 Katkıda Bulunanlar
-
-| İsim | Rol |
+| Name | Role |
 |---|---|
-| **Asya Berk** | Proje sahibi, backend, RAG pipeline, araştırma |
-| **Utku ...** | Frontend, sistem entegrasyonu |
+| **Asya Berk** | Project lead, backend, RAG pipeline, research |
+| **Utku Akgül** | Frontend, system integration |
 
-**Danışman:** Prof. Dr. Tuğba Yıldız
+**Advisor:** Doç. Dr. Tuğba Dalyan — Istanbul Bilgi University
 
 ---
 
 <div align="center">
-  <p>Bilgi Üniversitesi — Bilgisayar Mühendisliği Senior Design, 2025–2026</p>
+  <p>Istanbul Bilgi University — Computer Engineering Senior Design, 2025–2026</p>
 </div>

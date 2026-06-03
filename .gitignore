@@ -1,8 +1,24 @@
+# Python
 .venv/
-node_modules/
 __pycache__/
+*.pyc
+*.log
+
+# Node
+node_modules/
+
+# OS
 .DS_Store
+
+# Secrets
 .env
-paper/
-old_proposal_files/
-uploads/
+
+# User uploads (runtime data)
+/uploads/
+
+# Generated FAISS index binaries (rebuild with prebuild_faiss.py)
+experiment_outputs/*.npy
+
+# Project-specific excludes
+/paper/
+/old_proposal_files/
