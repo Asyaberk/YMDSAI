@@ -113,7 +113,7 @@ export const documents = {
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export interface DashboardMetrics {
-  stats: { activeAnalyses: number; completed: number; critical: number; pending: number };
+  stats: { totalDocuments: number; activeAnalyses: number; completed: number; critical: number; pending: number };
   recentDocuments: { id: string; name: string; status: string; complianceScore: number; uploadDate: string }[];
   trendData: { month: string; uyumlu: number; kismen: number; uyumsuz: number }[];
   categoryScores: { name: string; score: number }[];

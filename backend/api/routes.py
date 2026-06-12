@@ -199,7 +199,9 @@ def delete_document(doc_id: str, db: Session = Depends(get_db), current_user=Dep
 @router.get("/dashboard/metrics")
 def get_metrics(db: Session = Depends(get_db), current_user=Depends(_require_user)):
     uid = current_user.id
-    base_q = db.query(domain.DocumentModel).filter(domain.DocumentModel.user_id == uid)
+    base_q = db.query(domain.DocumentModel)
+    if current_user.role != "ADMIN":
+        base_q = base_q.filter(domain.DocumentModel.user_id == uid)
 
     total     = base_q.count()
     compliant = base_q.filter(domain.DocumentModel.status == "Uyumlu").count()
@@ -228,16 +230,20 @@ def get_metrics(db: Session = Depends(get_db), current_user=Depends(_require_use
             "uyumsuz": round(sum(1 for d in docs_m if d.status == "Uyumsuz")       / t * 100),
         })
 
-    cats = db.query(domain.DocumentModel.category,
-                    func.avg(domain.DocumentModel.compliance_score)
-                    ).filter(domain.DocumentModel.user_id == uid
-                    ).group_by(domain.DocumentModel.category).all()
+    cats_q = db.query(
+        domain.DocumentModel.category,
+        func.avg(domain.DocumentModel.compliance_score),
+    )
+    if current_user.role != "ADMIN":
+        cats_q = cats_q.filter(domain.DocumentModel.user_id == uid)
+    cats = cats_q.group_by(domain.DocumentModel.category).all()
     category_scores = [{"name": c, "score": round(s or 0)} for c, s in cats] or [
         {"name": "Henüz veri yok", "score": 0}
     ]
 
     return {
         "stats": {
+            "totalDocuments": total,
             "activeAnalyses": partial,
             "completed":      compliant,
             "critical":       non_compl,
