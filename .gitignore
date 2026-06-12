@@ -18,7 +18,3 @@ node_modules/
 
 # Generated FAISS index binaries (rebuild with prebuild_faiss.py)
 experiment_outputs/*.npy
-
-# Project-specific excludes
-/paper/
-/old_proposal_files/
