@@ -1,0 +1,414 @@
+%%
+%% YMDS AI — Main Paper
+%% Target: Expert Systems with Applications (Elsevier)
+%% Template: Elsevier CAS Double-Column (cas-dc)
+%% Compiler: pdflatex → bibtex → pdflatex × 2
+%%
+
+\documentclass[a4paper,fleqn]{cas-dc}
+
+%% ── Packages ────────────────────────────────────────────────────────────────
+\usepackage[numbers]{natbib}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{subcaption}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage[ruled,linesnumbered]{algorithm2e}
+
+%% ── Running Headers ─────────────────────────────────────────────────────────
+\shorttitle{YMDS AI: RAG-Based Regulatory Compliance Checking}
+\shortauthors{A. Berk, U. Akgül et~al.}
+
+%% ════════════════════════════════════════════════════════════════════════════
+\begin{document}
+\let\WriteBookmarks\relax
+\def\floatpagepagefraction{1}
+\def\textpagefraction{.001}
+
+%% ── Title ───────────────────────────────────────────────────────────────────
+\title[mode=title]{YMDS AI: A Retrieval-Augmented Generation Framework
+  for Automated University Regulatory Compliance Checking}
+
+%% ── Authors ─────────────────────────────────────────────────────────────────
+\author[1]{Asya Berk}
+\ead{asya.berk@bilgi.edu.tr}
+\credit{Conceptualization, Methodology, Software, Writing -- Original Draft}
+
+\author[1]{Utku Akgul}
+\ead{utku.akgul@bilgi.edu.tr}
+\credit{Software, Data Curation, Validation, Visualization}
+
+\author[1]{Tugba Dalyan}
+\cormark[1]
+\fnmark[1]
+\ead{tugba.dalyan@bilgi.edu.tr}
+\credit{Supervision, Writing -- Review \& Editing, Project Administration}
+
+\affiliation[1]{
+  organization={Department of Computer Engineering, Istanbul Bilgi University},
+  addressline={Kazım Karabekir Cad. No:2/13},
+  city={Istanbul},
+  postcode={34060},
+  country={Turkey}
+}
+
+\cortext[cor1]{Corresponding author}
+\fntext[fn1]{Supervisor}
+
+%% ── Abstract ────────────────────────────────────────────────────────────────
+\begin{abstract}
+Universities in Turkey must comply with regulations set by the Higher Education Council
+(YÖK), a process currently carried out manually by administrative staff who must read
+through long, dense legal documents. We present \textbf{YMDS AI}, a
+retrieval-augmented generation (RAG) system that automatically assesses whether
+institutional policy documents conform to applicable YÖK regulations. The system indexes
+nine official regulatory documents and evaluates five retrieval pipeline variants ---
+sparse BM25, dense vector search (FAISS), a hybrid of the two, multi-query expansion,
+and a no-RAG baseline --- each combined with GPT-4o and GPT-4o-mini, for ten
+configurations in total. To enable meaningful evaluation, we constructed a
+\textit{RAG-aware} benchmark of 40 compliance cases drawn from specific YÖK article
+passages, designed so that correct answers require access to the regulatory text. Our
+best configuration (Hybrid or BM25 with either model) achieves 47.5\% accuracy compared
+to 37.5\% for the no-RAG baseline, a 10 percentage point improvement. GPT-4o-mini
+matches GPT-4o accuracy at approximately 18$\times$ lower cost. Ablation studies
+identify a chunk size of 350 words and retrieval depth of $K{=}5$ as optimal settings.
+We also find that all models exhibit a systematic bias toward the \textit{partial} label
+and rarely predict \textit{non-compliant}, even for clear violations --- a finding with
+important practical implications for deployment. The system, benchmark dataset, and
+evaluation scripts are open-sourced to support future research.
+\end{abstract}
+
+%% ── Graphical Abstract ───────────────────────────────────────────────────────
+%% Uncomment when graphical abstract PDF is ready:
+%% \begin{graphicalabstract}
+%% \includegraphics{figures/graphical_abstract.pdf}
+%% \end{graphicalabstract}
+
+%% ── Highlights ───────────────────────────────────────────────────────────────
+\begin{highlights}
+\item First RAG-based compliance checking system for Turkish higher education regulations
+\item Five retrieval pipelines evaluated: No-RAG, BM25, Dense, Hybrid, and Multi-Query
+\item Hybrid + BM25 outperform no-RAG by 10 percentage points on a hard RAG-aware benchmark
+\item GPT-4o-mini matches GPT-4o accuracy at 19$\times$ lower API cost
+\item Ablation studies identify 350-word chunks and Top-5 retrieval as optimal settings
+\end{highlights}
+
+%% ── Keywords ─────────────────────────────────────────────────────────────────
+\begin{keywords}
+Retrieval-Augmented Generation \sep
+Regulatory Compliance \sep
+Higher Education \sep
+Large Language Models \sep
+BM25 \sep
+Natural Language Processing \sep
+YÖK
+\end{keywords}
+
+\maketitle
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 1 — INTRODUCTION
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+\input{sections/01_introduction}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 2 — RELATED WORK
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Related Work}
+\label{sec:related}
+\input{sections/02_related_work}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 3 — SYSTEM ARCHITECTURE
+%% ════════════════════════════════════════════════════════════════════════════
+\section{System Architecture}
+\label{sec:architecture}
+\input{sections/03_architecture}
+
+\begin{figure*}[h]
+  \centering
+  \includegraphics[width=0.96\textwidth]{figures/fig01_architecture.png}
+  \caption{Overview of the YMDS AI system architecture. University policy
+    documents are uploaded via the React dashboard and forwarded to the FastAPI
+    backend. The backend splits each document into articles, invokes the selected
+    RAG pipeline to retrieve relevant YÖK regulation chunks from the knowledge
+    base, and passes the retrieved context to the LLM for per-article compliance
+    assessment. Results are stored in PostgreSQL and rendered in the dashboard
+    with article-level status labels and a document-level compliance score.}
+  \label{fig:architecture}
+\end{figure*}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 4 — METHODOLOGY
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Methodology}
+\label{sec:methodology}
+\input{sections/04_methodology}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 5 — EXPERIMENTAL SETUP
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Experimental Setup}
+\label{sec:setup}
+\input{sections/05_experimental_setup}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 6 — RESULTS AND DISCUSSION
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Results and Discussion}
+\label{sec:results}
+\input{sections/06_results}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% SECTION 7 — CONCLUSION
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+\label{sec:conclusion}
+\input{sections/07_conclusion}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% CRediT Author Contribution Statement
+%% ════════════════════════════════════════════════════════════════════════════
+\printcredits
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% Declaration of Competing Interest
+%% ════════════════════════════════════════════════════════════════════════════
+\section*{Declaration of Competing Interest}
+The authors declare that they have no known competing financial interests or
+personal relationships that could have appeared to influence the work reported
+in this paper.
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% Acknowledgements
+%% ════════════════════════════════════════════════════════════════════════════
+\section*{Acknowledgements}
+This work was conducted as part of the Senior Design Project at Istanbul Bilgi
+University, Department of Computer Engineering. The authors thank the
+Department of Student Affairs for providing access to institutional policy
+documents used in the evaluation.
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% Data Availability
+%% ════════════════════════════════════════════════════════════════════════════
+\section*{Data Availability}
+The benchmark test set, evaluation scripts, and FAISS index caches are
+available at: \url{https://github.com/Asyaberk/complianceAi}.
+The YÖK regulatory documents used as the knowledge base are publicly available
+at \url{https://www.yok.gov.tr}.
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% Bibliography
+%% ════════════════════════════════════════════════════════════════════════════
+\bibliographystyle{cas-model2-names}
+\bibliography{compliance_ai}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% APPENDIX A — System Prompt
+%% ════════════════════════════════════════════════════════════════════════════
+\appendix
+\section{LLM System Prompt}
+\label{app:prompt}
+
+The following system prompt is used for all per-article LLM compliance reasoning calls
+(reproduced verbatim from \texttt{backend/services/rag\_service.py}, \texttt{ARTICLE\_SYSTEM}):
+
+\begin{verbatim}
+Sen Türk yükseköğretim hukuku uzmanı bir denetçisin.
+Sana incelenen bir üniversite yönetmeliğinin TEK BİR MADDESİ
+ve referans YÖK mevzuat parçaları verilecek.
+
+TEMEL İLKE: Uyumluluk = kelime kelime aynı olmak DEĞİL,
+YÖK'ün düzenlediği amacı/hükmü karşılamak demektir.
+
+UYUMLULUK TANIMLARI (4 seçenek):
+- Uyumlu: Madde, YÖK'ün düzenlediği konuyu karşılıyor.
+  İfade farklı olsa da aynı amacı güdüyor.
+- Kısmen Uyumlu: Madde genel olarak doğru yönde ama
+  (a) YÖK'ün zorunlu kıldığı spesifik bir unsur eksik, veya
+  (b) belirsiz/muğlak ifadeler YÖK'ün net hükmünü tam
+  karşılamıyor. Sağlanan YÖK parçaları bu maddeyle
+  yalnızca dolaylı ilgiliyse de Kısmen Uyumlu ver.
+- Uyumsuz: Aşağıdaki somut durumlardan biri varsa:
+  (a) YÖK'ün belirlediği sayısal eşik/süre/oran farklıysa;
+  (b) YÖK'ün zorunlu kıldığı onay makamı/prosedür yoksa;
+  (c) YÖK'ün yasakladığı bir uygulama belgede varsa;
+  (d) YÖK'ün tanımladığı hak/koruma belgede kısıtlanmışsa.
+- Kapsam Dışı: YALNIZCA şu iki durumda kullan:
+  (1) Bu konu YÖK mevzuatının hiçbir bölümünde düzenlenmemiş;
+      üniversitenin tamamen serbest bırakıldığı idari konudur.
+  (2) Madde yalnızca geçici/geçiş hükmü içeriyor.
+  ÖNEMLI: Konu şunlardan biriyse Kapsam Dışı VERMEK YASAKTIR:
+  Sınav, not sistemi, GANO/YANO/AGNO, ders kaydı, kayıt
+  dondurma, mezuniyet, burs, disiplin, akademik takvim,
+  ders programı, kredi sistemi, öğrenci kabulü.
+
+ÇIKTI — yalnızca bu JSON (başka metin ekleme):
+{
+  "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz|Kapsam Dışı>",
+  "similarity": <0.0–1.0, anlam örtüşmesi>,
+  "yok_reference": "<ilgili YÖK mevzuat adı ve maddesi>",
+  "yok_text": "<sağlanan YÖK parçalarından doğrudan alıntı>",
+  "reasoning": [
+    "<neden bu status: belgede ne diyor, YÖK ne diyor>",
+    "<varsa eksiklik veya çelişki>"
+  ],
+  "suggestion": "<YALNIZCA Kısmen Uyumlu/Uyumsuz ise:
+                  ne değiştirilmeli/eklenmeli? Uyumlu ise: ''>"
+}
+\end{verbatim}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% APPENDIX B — Application Screenshots
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Application Screenshots}
+\label{app:screenshots}
+
+The following figures show the main pages of the deployed YMDS AI
+web application. All screenshots are taken from the production deployment
+running on \texttt{localhost} with Docker Compose
+(FastAPI backend + React frontend + PostgreSQL).
+The full source code is available at \url{https://github.com/Asyaberk/complianceAi}.
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.88\columnwidth}{\centering\vspace{2cm}
+    \textit{[Placeholder — Compliance Analysis page:\newline
+    document list with compliance scores and status badges]}
+    \vspace{2cm}}}
+  \caption{Compliance Analysis page. Uploaded documents are listed with
+    their overall compliance score (0--100), status badge, and article
+    breakdown counts.}
+  \label{fig:app_analysis_list}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.88\columnwidth}{\centering\vspace{2cm}
+    \textit{[Placeholder — Article detail view:\newline
+    per-article status, YÖK reference, similarity score, and suggestions]}
+    \vspace{2cm}}}
+  \caption{Article-level detail view. Each article is classified as
+    Compliant, Partially Compliant, Out-of-Scope, or Non-Compliant, with
+    the retrieved YÖK regulation text, similarity score, and
+    an improvement suggestion.}
+  \label{fig:app_article_detail}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.88\columnwidth}{\centering\vspace{2cm}
+    \textit{[Placeholder — Admin Dashboard:\newline
+    document management table with PDF viewer and user statistics]}
+    \vspace{2cm}}}
+  \caption{Admin Dashboard. Administrators can view all uploaded documents
+    across all users, open the original PDF, inspect per-document article
+    statistics, and delete records.}
+  \label{fig:app_admin}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.88\columnwidth}{\centering\vspace{2cm}
+    \textit{[Placeholder — RAG Experiments page:\newline
+    pipeline comparison charts, ablation results, and per-class heatmap]}
+    \vspace{2cm}}}
+  \caption{RAG Experiments page. All benchmark results (accuracy, latency,
+    cost) and ablation study charts are rendered from the live
+    experimental outputs stored in the repository.}
+  \label{fig:app_experiments}
+\end{figure}
+
+%% ════════════════════════════════════════════════════════════════════════════
+%% APPENDIX C — Core Algorithms
+%% ════════════════════════════════════════════════════════════════════════════
+\section{Core Algorithms}
+\label{app:algorithms}
+
+This appendix provides formal pseudocode for two implementation-specific
+components: the Turkish article boundary detector (Algorithm~\ref{alg:splitter}),
+which is domain-novel, and the hybrid retrieval pipeline
+(Algorithm~\ref{alg:hybrid}), whose linear score interpolation is detailed
+here to distinguish it from a rank-position-based fusion approach.
+
+\begin{algorithm}[htbp]
+\DontPrintSemicolon
+\SetKwInOut{Input}{Input}
+\SetKwInOut{Output}{Output}
+\caption{Turkish Article Boundary Detection}
+\label{alg:splitter}
+
+\Input{Raw PDF text $T$ (continuous string after \texttt{pypdf} extraction)}
+\Output{List of articles $\mathcal{A} = [\{\text{number},\,\text{title},\,\text{text}\}]$}
+
+$P_1 \leftarrow$ \texttt{(Madde|MADDE)\textbackslash s+(\textbackslash d+)\textbackslash s*[-\textendash\textemdash]} \tcp*{dash after number}
+$P_2 \leftarrow$ \texttt{(Madde|MADDE)\textbackslash s*[-\textendash\textemdash]\textbackslash s*(\textbackslash d+)} \tcp*{dash before number}
+$P_3 \leftarrow$ \texttt{(Madde|MADDE)\textbackslash s+(\textbackslash d+)\textbackslash s*\textbackslash(} \tcp*{parenthesis format}
+
+$M \leftarrow \text{findall}(P_1, T)$\;
+\lIf{$|M| < 2$}{ $M' \leftarrow \text{findall}(P_2, T)$;\quad \lIf{$|M'| > |M|$}{$M \leftarrow M'$} }
+\lIf{$|M| < 2$}{ $M'' \leftarrow \text{findall}(P_3, T)$;\quad \lIf{$|M''| > |M|$}{$M \leftarrow M''$; \texttt{use\_paren} $\leftarrow$ True} }
+\lIf{$|M| < 2$}{ \Return 500-word chunks of $T$ labelled B\"ol\"um 1, 2,\,\ldots }
+
+\ForEach{$(i,\; m_i) \in \text{enumerate}(M)$}{
+  art\_start $\leftarrow m_i.\text{start}()$\;
+  art\_end $\leftarrow m_{i+1}.\text{start}()$ \textbf{if} $i+1 < |M|$ \textbf{else} $|T|$\;
+  body $\leftarrow T[\text{art\_start}:\text{art\_end}]$, stripped of trailing page number\;
+  \uIf{\texttt{use\_paren}}{
+    title $\leftarrow$ content inside first \texttt{(\ldots)} following $m_i$\;
+  }\Else{
+    title $\leftarrow$ last 1--6 words preceding $m_i$ in current article span\;
+  }
+  append $\{\text{number}: \texttt{Madde}~i,\; \text{title},\; \text{text}: \text{body}\}$ to $\mathcal{A}$\;
+}
+\Return $\mathcal{A}$
+\end{algorithm}
+
+\bigskip
+
+\begin{algorithm}[htbp]
+\DontPrintSemicolon
+\SetKwInOut{Input}{Input}
+\SetKwInOut{Output}{Output}
+\caption{Hybrid Retrieval via Linear Score Interpolation}
+\label{alg:hybrid}
+
+\Input{Query $q$; BM25 index $\mathcal{B}$; FAISS index $\mathcal{F}$; depth $K$; weight $\alpha = 0.5$}
+\Output{Top-$K$ chunks ranked by hybrid score}
+
+$R_B \leftarrow \text{BM25\_retrieve}(\mathcal{B}, q, 2K)$ \tcp*{sparse candidates with raw BM25 scores}
+$R_F \leftarrow \text{FAISS\_retrieve}(\mathcal{F}, q, 2K)$ \tcp*{dense candidates with cosine scores}
+
+\tcp{Min-max normalise each score list independently to $[0,1]$}
+$\hat{s}_B[c] \leftarrow \dfrac{s_B[c] - \min_B}{\max_B - \min_B}$ \quad for each $c \in R_B$\;
+$\hat{s}_F[c] \leftarrow \dfrac{s_F[c] - \min_F}{\max_F - \min_F}$ \quad for each $c \in R_F$\;
+
+$S \leftarrow \{\}$\;
+\ForEach{$c \in R_B$}{ $S[c] \mathrel{+}= (1-\alpha)\,\hat{s}_B[c]$ }
+\ForEach{$c \in R_F$}{ $S[c] \mathrel{+}= \alpha\,\hat{s}_F[c]$ }
+
+\Return top-$K$ chunks from $S$ sorted by score descending
+\end{algorithm}
+
+\smallskip
+\noindent\textbf{Note on Multi-Query.} The Multi-Query pipeline generates two
+additional query phrasings via an LLM call (temperature~$= 0.7$), runs
+BM25 independently for each of the three queries (original plus two variants),
+and merges results by union before re-ranking by BM25 score (Algorithm
+line~2 of the BM25 path). This adds exactly one extra API call per request
+and requires no additional index structures.
+
+\end{document}

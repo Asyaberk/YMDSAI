@@ -1,0 +1,278 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{listings}
+\usepackage{underscore}
+\usepackage{longtable}
+\usepackage{tocloft}
+\usepackage{xcolor}
+\usepackage{styles/ibu-thesis}
+\usepackage{subcaption}
+\usepackage{lipsum}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{enumitem}
+
+\sloppy
+
+\definecolor{tocblue}{RGB}{48, 84, 150}
+\renewcommand{\cftsecfont}{\color{tocblue}}
+\renewcommand{\cftsecpagefont}{\color{tocblue}}
+
+\setlength{\headheight}{14.5pt}
+
+\papertitle{Compliance Check Framework for University Business Processes}
+\authors[1]{ASYA BERK, 122200040}
+\authors[2]{UTKU AKGÜL, 123200031}
+\course{CMPE490: SENIOR DESIGN PROJECT\\REPORT 2}
+
+\begin{document}
+
+\renewcommand{\arraystretch}{1.2}
+
+\maketitle
+
+%-------------------------------------------------
+% ABSTRACT
+%-------------------------------------------------
+
+\newpage
+\section{Abstract}
+
+\hspace{0.5cm} ComplianceAI is a Retrieval-Augmented Generation (RAG) based regulatory compliance checking system developed for Turkish higher education institutions. The system automatically evaluates whether university policy documents comply with YÖK regulations by retrieving relevant regulation passages and analyzing them using large language models. The project integrates BM25, Dense Retrieval, Hybrid Retrieval, and Multi-Query retrieval pipelines with GPT-4o and GPT-4o-mini models. Experimental evaluations demonstrate that retrieval-based approaches significantly outperform direct LLM prompting. The system aims to reduce administrative workload, improve regulatory consistency, and support digital transformation in university management processes.
+
+%-------------------------------------------------
+% TABLE OF CONTENTS
+%-------------------------------------------------
+
+\newpage
+\tableofcontents
+
+%-------------------------------------------------
+% INTRODUCTION
+%-------------------------------------------------
+
+\newpage
+\section{Introduction}
+
+\hspace{0.5cm} Universities in Turkey must comply with regulations published by the Council of Higher Education (YÖK). Administrative personnel are responsible for checking whether institutional procedures and policy documents conform to these regulations. However, manual compliance checking is time-consuming, repetitive, and error-prone because regulations are long and contain complex legal language.
+
+ComplianceAI was developed to address this problem by automating part of the compliance checking process. The system combines Retrieval-Augmented Generation techniques with modern large language models to retrieve relevant regulation passages and generate structured compliance assessments. The project aims to improve efficiency while still keeping human experts involved in the final decision-making process.
+
+%-------------------------------------------------
+% PROJECT OVERVIEW
+%-------------------------------------------------
+
+\section{Project Overview}
+
+\subsection{Project Motivation}
+
+\hspace{0.5cm} Manual regulation analysis requires significant effort from university staff. Administrators must frequently compare internal documents with YÖK regulations and identify possible inconsistencies. This process becomes increasingly difficult as regulations grow larger and are updated frequently. The motivation behind ComplianceAI is to reduce administrative workload and provide faster preliminary compliance evaluations using artificial intelligence technologies.
+
+\subsection{Problem Definition}
+
+\hspace{0.5cm} Existing compliance review processes in universities are mostly manual and depend heavily on human interpretation. Administrative staff must search through multiple YÖK regulation documents to determine whether a university policy satisfies legal requirements. This leads to long review times, inconsistent evaluations, and increased risk of human error.
+
+\subsection{Project Objectives}
+
+\begin{itemize}[leftmargin=1.2cm]
+    \item Develop an automated compliance checking system using RAG architecture.
+    \item Retrieve relevant YÖK regulation passages efficiently.
+    \item Generate structured compliance reports using LLMs.
+    \item Compare different retrieval pipelines and evaluate their performance.
+    \item Build a scalable and modular system architecture for future expansion.
+\end{itemize}
+
+%-------------------------------------------------
+% SYSTEM DESIGN
+%-------------------------------------------------
+
+\section{System Design}
+
+\subsection{General Architecture}
+
+\hspace{0.5cm} ComplianceAI consists of three main layers: the knowledge base layer, the inference backend layer, and the frontend interface layer. The knowledge base stores YÖK regulations as chunked text documents indexed using BM25 and FAISS. The backend processes user requests and retrieves relevant regulation passages using different retrieval methods. Finally, the frontend provides an interactive dashboard where users upload documents and receive compliance reports.
+
+\subsection{Technology Stack}
+
+\hspace{0.5cm} The backend was developed using Python and FastAPI. BM25 retrieval was implemented using the rank bm25 library, while dense vector retrieval used FAISS and OpenAI embedding models. The frontend interface was developed using React. OpenAI GPT-4o and GPT-4o-mini models were used for compliance reasoning tasks.
+
+\subsection{Database Design}
+
+\hspace{0.5cm} The system uses PostgreSQL as its transactional relational database. User accounts, roles, uploaded document metadata, article-level compliance results, scores, and generated explanations are stored in relational tables through SQLAlchemy models. The regulatory knowledge base is stored separately as indexed text chunks: BM25 supports sparse keyword retrieval and FAISS supports dense semantic retrieval. This separation allows the application to preserve auditable user results while keeping retrieval indexes optimized for search.
+
+\subsection{User Interface Design}
+
+\hspace{0.5cm} The frontend interface is designed for non-technical university personnel. Users can upload policy documents, choose retrieval pipelines and language options, and receive structured compliance reports including compliance scores, article-level labels, retrieved YÖK passages, explanations, and corrective suggestions. Administrators can inspect all uploaded documents and manage users. The bilingual interface supports both Turkish operational use and English academic demonstration.
+
+%-------------------------------------------------
+% IMPLEMENTATION
+%-------------------------------------------------
+
+\section{Implementation}
+
+\subsection{Backend Development}
+
+\hspace{0.5cm} The backend was implemented using FastAPI and Python. API endpoints were created to process uploaded documents, perform retrieval operations, and communicate with OpenAI APIs. The backend also handles chunk generation, embedding creation, and prompt construction.
+
+\subsection{Frontend Development}
+
+\hspace{0.5cm} The frontend was developed using React to provide a responsive and user-friendly interface. Users interact with the system through forms and dashboards. Compliance reports are displayed with structured layouts and visual indicators.
+
+\subsection{Integration Process}
+
+\hspace{0.5cm} The frontend and backend communicate using REST APIs. Retrieved regulation passages are sent to the language model together with user documents. The generated compliance evaluation is then returned to the frontend and displayed to the user.
+
+%-------------------------------------------------
+% RISK MANAGEMENT
+%-------------------------------------------------
+
+\section{Risk and Change Management}
+
+\subsection{Potential Risks}
+
+\hspace{0.5cm} Several technical and operational risks exist within the project. Large language models may generate incorrect compliance decisions or hallucinated explanations. Outdated regulations may also reduce system reliability if the knowledge base is not updated regularly. Additionally, dependency on external APIs introduces availability and pricing risks.
+
+\begin{longtable}{|p{3.5cm}|p{3cm}|p{6.5cm}|}
+\hline
+\textbf{Risk} & \textbf{Impact} & \textbf{Mitigation} \\ \hline
+LLM hallucination or over-cautious labels & Incorrect compliance advice & Retrieval grounding, JSON schema prompts, source excerpts, and human-in-the-loop review \\ \hline
+Outdated regulations & Reduced legal reliability & Static index versioning, live YÖK catalogue links, and planned re-indexing when source PDFs change \\ \hline
+API availability and cost & Interrupted analysis or higher operating cost & GPT-4o-mini default configuration, modular model selection, and Dockerized deployment \\ \hline
+Privacy of uploaded documents & Exposure of institutional documents & Authentication, role-based access, local PostgreSQL persistence, and limited storage scope \\ \hline
+Performance on long PDFs & Slow response time & Article-level parsing, chunked retrieval, and benchmark-driven Top-K/chunk-size choices \\ \hline
+\end{longtable}
+
+\subsection{Risk Mitigation Plan}
+
+\hspace{0.5cm} Human-in-the-loop verification is used to reduce incorrect compliance decisions. The system is intended as a decision support tool rather than a fully autonomous legal authority. Retrieval-based grounding and structured prompting reduce hallucination risks. Modular architecture also enables future improvements without redesigning the entire system.
+
+\subsection{Change Management}
+
+\hspace{0.5cm} The project follows modular software engineering principles. Retrieval pipelines, embedding models, and language models can be updated independently. Git and GitHub were used throughout development for version control and collaborative change tracking.
+
+%-------------------------------------------------
+% STANDARDS
+%-------------------------------------------------
+
+\section{Standards and Engineering Ethics}
+
+\subsection{IEEE Standards}
+
+\hspace{0.5cm} The project follows IEEE software engineering principles regarding maintainability, modularity, documentation, and software quality. Software development practices were influenced by IEEE software engineering standards.
+
+\subsection{EU and Turkish Standards}
+
+\hspace{0.5cm} ComplianceAI considers European Union trustworthy AI principles including transparency, explainability, and human oversight. The system also directly follows Turkish higher education regulations published by YÖK.
+
+\subsection{Engineering Code of Conduct}
+
+\hspace{0.5cm} The project follows ethical engineering principles such as accountability, transparency, and responsibility. The system is designed to support human experts rather than replace institutional decision-makers. Its limitations are explicitly acknowledged: model outputs may be incomplete, retrieved passages may miss a relevant article, and legal interpretation requires qualified human review. Therefore, YMDS AI is positioned as a decision-support and risk-filtering tool, not as an autonomous legal authority.
+
+%-------------------------------------------------
+% SUSTAINABILITY
+%-------------------------------------------------
+
+\section{Sustainability}
+
+\subsection{UN Sustainable Development Goals}
+
+\hspace{0.5cm} ComplianceAI supports SDG 4 (Quality Education), SDG 9 (Industry, Innovation and Infrastructure), and SDG 16 (Peace, Justice and Strong Institutions) by improving administrative efficiency and regulatory transparency within higher education institutions.
+
+\subsection{Environmental Sustainability}
+
+\hspace{0.5cm} Since the project is entirely software-based, its environmental impact is relatively low. Digital compliance checking may reduce paper consumption and unnecessary administrative processes.
+
+\subsection{Long-Term System Sustainability}
+
+\hspace{0.5cm} The modular architecture ensures long-term maintainability and scalability. Future improvements such as automatic regulation synchronization and domain-specific fine-tuned models can be integrated into the system.
+
+%-------------------------------------------------
+% CONTRIBUTIONS
+%-------------------------------------------------
+
+\section{Contributions}
+
+\subsection{Contribution of Asya Berk}
+
+\hspace{0.5cm} Asya Berk contributed to backend development, retrieval pipeline implementation, benchmark evaluation, frontend integration, and system testing.
+
+\subsection{Contribution of Utku Akgül}
+
+\hspace{0.5cm} Utku Akgül contributed to project conceptualization, methodology design, report writing, literature review, and system planning.
+
+%-------------------------------------------------
+% CONCLUSION
+%-------------------------------------------------
+
+\section{Conclusion}
+
+\hspace{0.5cm} ComplianceAI demonstrates that Retrieval-Augmented Generation systems can effectively support regulatory compliance analysis within higher education institutions. Experimental results showed that retrieval-based pipelines outperform direct LLM prompting approaches. The project provides a scalable and modular architecture that may be expanded for broader institutional deployment in the future.
+
+%-------------------------------------------------
+% REALISTIC CONSTRAINTS
+%-------------------------------------------------
+
+\subsection{Realistic Constraints}
+
+\hspace{0.5cm} The project was developed under limited time, hardware, and financial constraints. Cloud-based APIs were used due to limited local computational resources. Additionally, the project duration was restricted to a single academic semester.
+
+\subsubsection{Social Impact}
+
+\hspace{0.5cm} The project may reduce administrative workload and improve consistency in university compliance processes. It also contributes to digital transformation in higher education administration.
+
+\subsubsection{Environmental Impact}
+
+\hspace{0.5cm} The software-based nature of the project minimizes environmental impact. Reduced paper usage and digital workflows may contribute positively to sustainability.
+
+\subsubsection{Economic Impact}
+
+\hspace{0.5cm} ComplianceAI may reduce labor costs associated with manual compliance analysis. The use of GPT-4o-mini also provides strong cost-performance advantages for deployment.
+
+%-------------------------------------------------
+% COST ANALYSIS
+%-------------------------------------------------
+
+\subsection{Cost Analysis}
+
+\hspace{0.5cm} The primary costs of the project include labor, API usage, and development infrastructure.
+
+\begin{table}[H]
+\centering
+\caption{Estimated Research and Development Cost Analysis}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Item} & \textbf{Hours / Quantity} & \textbf{Cost} \\ \hline
+Research and literature review & 120 hours & 36,000 TL \\ \hline
+Backend and RAG development & 180 hours & 54,000 TL \\ \hline
+Frontend and dashboard development & 160 hours & 48,000 TL \\ \hline
+Experiments, testing, and reporting & 100 hours & 30,000 TL \\ \hline
+OpenAI API usage and development services & Estimated project usage & 5,000 TL \\ \hline
+Hardware and software tools & Existing laptops / open-source tools & 0 TL \\ \hline
+Total & 560 hours + services & 173,000 TL \\ \hline
+\end{tabular}
+\end{table}
+
+\hspace{0.5cm} The labor estimate assumes a conservative student R\&D rate of 300 TL per hour. Because the project is software-based and relies mainly on open-source tools, the dominant cost is engineering time rather than physical materials.
+
+%-------------------------------------------------
+% PROJECT OUTCOMES
+%-------------------------------------------------
+
+\subsection{Project Outcomes}
+
+\hspace{0.5cm} The project successfully demonstrated the feasibility of applying Retrieval-Augmented Generation systems to regulatory compliance checking within Turkish higher education institutions. The developed system achieved measurable improvements over non-retrieval baselines and provided valuable insights into the strengths and limitations of LLM-based compliance analysis systems.
+
+%-------------------------------------------------
+% REFERENCES
+%-------------------------------------------------
+
+\clearpage
+
+\bibliographystyle{ieeetr}
+\addcontentsline{toc}{section}{References}
+\bibliography{references}
+
+\end{document}
