@@ -5,29 +5,61 @@ import {
   Gavel, FileText, Megaphone, ScrollText, Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface MevzuatItem {
-  title: string;
-  url: string | null;
-  hasLink: boolean;
-}
-
-interface MevzuatCategory {
-  name: string;
-  count: number;
-  items: MevzuatItem[];
-}
-
+interface MevzuatItem  { title: string; url: string | null; hasLink: boolean; }
+interface MevzuatCategory { name: string; count: number; items: MevzuatItem[]; }
 interface MevzuatData {
-  source: string;
-  lastUpdated: string | null;
-  cached: boolean;
-  totalCount: number;
-  categories: MevzuatCategory[];
-  error?: string;
+  source: string; lastUpdated: string | null; cached: boolean;
+  totalCount: number; categories: MevzuatCategory[]; error?: string;
 }
+
+// ── Translations ──────────────────────────────────────────────────────────────
+
+const copy = {
+  tr: {
+    title: 'YÖK Mevzuatı',
+    subtitle: 'Türk yükseköğretim mevzuatının güncel listesi.',
+    officialSource: 'Resmi YÖK Kaynağı',
+    fromCache: 'Önbellekten',
+    liveData: 'Canlı veri',
+    refreshing: 'Yenileniyor...',
+    refresh: 'Yenile',
+    officialSite: 'YÖK Resmi Site',
+    totalLabel: 'Toplam',
+    searchPlaceholder: 'Mevzuat ara...',
+    loadingMsg: 'YÖK mevzuatı yükleniyor...',
+    retry: 'Tekrar Dene',
+    errorMsg: 'Mevzuat listesi yüklenemedi. Lütfen tekrar deneyin.',
+    searchResults: (q: string, n: number) => `"${q}" için ${n} sonuç`,
+    ragBadge: "RAG'da kullanılıyor",
+    noLink: 'Bağlantı yok',
+    footer: (live: string, reg: string) =>
+      `Veriler ${live}'den canlı olarak çekilmektedir. Lisans ve yönetmelik metinleri için ${reg}'yi ziyaret edin.`,
+  },
+  en: {
+    title: 'YÖK Regulations',
+    subtitle: 'Current list of Turkish higher education regulations.',
+    officialSource: 'Official YÖK Source',
+    fromCache: 'From cache',
+    liveData: 'Live data',
+    refreshing: 'Refreshing...',
+    refresh: 'Refresh',
+    officialSite: 'YÖK Official Site',
+    totalLabel: 'Total',
+    searchPlaceholder: 'Search regulations...',
+    loadingMsg: 'Loading YÖK regulations...',
+    retry: 'Try Again',
+    errorMsg: 'Could not load regulation list. Please try again.',
+    searchResults: (q: string, n: number) => `${n} results for "${q}"`,
+    ragBadge: 'Used in RAG',
+    noLink: 'No link',
+    footer: (live: string, reg: string) =>
+      `Data is sourced live from ${live}. Visit ${reg} for full regulation texts.`,
+  },
+} as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -49,7 +81,6 @@ function categoryColor(name: string) {
   return 'border-slate-200 bg-slate-50 text-slate-500';
 }
 
-// RAG-used PDFs match (our local corpus)
 const RAG_SOURCES = ['yok', 'lisansustu', 'cap', 'yandal', 'yatay', 'ek-madde', 'yurt'];
 function isRagUsed(title: string) {
   const t = title.toLowerCase();
@@ -59,6 +90,9 @@ function isRagUsed(title: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function YokMevzuat() {
+  const { language } = useLanguage();
+  const c = copy[language];
+
   const [data, setData]           = useState<MevzuatData | null>(null);
   const [loading, setLoading]     = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,7 +106,6 @@ export default function YokMevzuat() {
     if (forceRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
-
     try {
       const url    = forceRefresh ? `${BASE}/api/yok/mevzuat/refresh` : `${BASE}/api/yok/mevzuat`;
       const method = forceRefresh ? 'POST' : 'GET';
@@ -81,31 +114,24 @@ export default function YokMevzuat() {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const json = await resp.json();
-      setData(json);
-    } catch (e) {
-      setError('Mevzuat listesi yüklenemedi. Lütfen tekrar deneyin.');
+      setData(await resp.json());
+    } catch {
+      setError(c.errorMsg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token]);
+  }, [token, c.errorMsg]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Filter items
   const filtered: MevzuatCategory[] = (data?.categories ?? []).map(cat => ({
     ...cat,
-    items: cat.items.filter(item =>
-      item.title.toLowerCase().includes(search.toLowerCase())
-    ),
-  })).filter(cat =>
-    (activeTab === 'Tümü' || cat.name === activeTab) && cat.items.length > 0
-  );
+    items: cat.items.filter(item => item.title.toLowerCase().includes(search.toLowerCase())),
+  })).filter(cat => (activeTab === 'Tümü' || cat.name === activeTab) && cat.items.length > 0);
 
-  const allTabs = ['Tümü', ...(data?.categories.map(c => c.name) ?? [])];
-
-  const totalFiltered = filtered.reduce((s, c) => s + c.items.length, 0);
+  const allTabs = ['Tümü', ...(data?.categories.map(cat => cat.name) ?? [])];
+  const totalFiltered = filtered.reduce((s, cat) => s + cat.items.length, 0);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -117,13 +143,13 @@ export default function YokMevzuat() {
             <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center">
               <Scale size={20} className="text-primary" />
             </div>
-            <h1 className="text-4xl font-medium tracking-tight text-slate-900">YÖK Mevzuatı</h1>
+            <h1 className="text-4xl font-medium tracking-tight text-slate-900">{c.title}</h1>
           </div>
           <p className="text-slate-500 text-sm">
-            Türk yükseköğretim mevzuatının güncel listesi.{' '}
+            {c.subtitle}{' '}
             <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
                className="text-primary font-semibold inline-flex items-center gap-1 hover:underline">
-              Resmi YÖK Kaynağı <ExternalLink size={12} />
+              {c.officialSource} <ExternalLink size={12} />
             </a>
           </p>
         </div>
@@ -131,11 +157,9 @@ export default function YokMevzuat() {
         <div className="flex items-center gap-3 self-start flex-wrap">
           {data?.lastUpdated && (
             <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-              {data.cached
-                ? <CheckCircle2 size={14} className="text-success" />
-                : <Globe size={14} className="text-primary" />}
-              {data.cached ? 'Önbellekten' : 'Canlı veri'} ·{' '}
-              {new Date(data.lastUpdated).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+              {data.cached ? <CheckCircle2 size={14} className="text-success" /> : <Globe size={14} className="text-primary" />}
+              {data.cached ? c.fromCache : c.liveData} ·{' '}
+              {new Date(data.lastUpdated).toLocaleTimeString(language === 'en' ? 'en-GB' : 'tr-TR', { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
           {data?.error && (
@@ -143,17 +167,14 @@ export default function YokMevzuat() {
               <AlertCircle size={14} /> {data.error}
             </div>
           )}
-          <button
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60"
-          >
+          <button onClick={() => fetchData(true)} disabled={refreshing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60">
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? 'Yenileniyor...' : 'Yenile'}
+            {refreshing ? c.refreshing : c.refresh}
           </button>
           <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
              className="flex items-center gap-2 px-4 py-2.5 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:border-primary hover:text-primary transition-all">
-            <ExternalLink size={14} /> YÖK Resmi Site
+            <ExternalLink size={14} /> {c.officialSite}
           </a>
         </div>
       </div>
@@ -162,12 +183,12 @@ export default function YokMevzuat() {
       {data && !loading && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: 'Toplam', value: data.totalCount, color: 'text-slate-900' },
-            ...data.categories.map(c => ({
-              label: c.name, value: c.count,
-              color: c.name === 'Kanunlar' ? 'text-primary' :
-                     c.name === 'Yönetmelikler' ? 'text-warning' :
-                     c.name === 'Tebliğler' ? 'text-success' : 'text-purple-600'
+            { label: c.totalLabel, value: data.totalCount, color: 'text-slate-900' },
+            ...data.categories.map(cat => ({
+              label: cat.name, value: cat.count,
+              color: cat.name === 'Kanunlar' ? 'text-primary' :
+                     cat.name === 'Yönetmelikler' ? 'text-warning' :
+                     cat.name === 'Tebliğler' ? 'text-success' : 'text-purple-600'
             }))
           ].map((s, i) => (
             <div key={i} className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm">
@@ -182,13 +203,9 @@ export default function YokMevzuat() {
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="relative flex-1 max-w-sm">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Mevzuat ara..."
-            value={search}
+          <input type="text" placeholder={c.searchPlaceholder} value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-primary transition-all shadow-sm"
-          />
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-primary transition-all shadow-sm" />
         </div>
         <div className="flex gap-2 flex-wrap">
           {allTabs.map(tab => (
@@ -205,20 +222,18 @@ export default function YokMevzuat() {
       {loading ? (
         <div className="flex flex-col items-center justify-center h-64 gap-4 text-slate-400">
           <Loader2 size={36} className="animate-spin text-primary" />
-          <p className="text-sm font-medium">YÖK mevzuatı yükleniyor...</p>
+          <p className="text-sm font-medium">{c.loadingMsg}</p>
         </div>
       ) : error ? (
         <div className="flex flex-col items-center justify-center h-64 gap-4 text-slate-400">
           <AlertCircle size={40} className="text-danger opacity-50" />
           <p className="text-sm font-medium text-danger">{error}</p>
-          <button onClick={() => fetchData()} className="btn-primary px-6 py-2 text-sm">Tekrar Dene</button>
+          <button onClick={() => fetchData()} className="btn-primary px-6 py-2 text-sm">{c.retry}</button>
         </div>
       ) : (
         <>
           {search && (
-            <p className="text-xs text-slate-400 font-medium">
-              "{search}" için {totalFiltered} sonuç
-            </p>
+            <p className="text-xs text-slate-400 font-medium">{c.searchResults(search, totalFiltered)}</p>
           )}
 
           <div className="space-y-8">
@@ -226,32 +241,24 @@ export default function YokMevzuat() {
               <motion.div key={cat.name} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: ci * 0.07 }}>
 
-                {/* Category Header */}
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${categoryColor(cat.name)}`}>
                     {categoryIcon(cat.name)}
                   </div>
                   <h2 className="text-lg font-bold text-slate-800">{cat.name}</h2>
-                  <span className="ml-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">
-                    {cat.items.length}
-                  </span>
+                  <span className="ml-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-xs font-bold">{cat.items.length}</span>
                 </div>
 
-                {/* Grid of Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {cat.items.map((item, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
+                    <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       transition={{ delay: ci * 0.07 + i * 0.02 }}
                       className={`relative bg-white border rounded-2xl p-5 transition-all group
-                        ${item.hasLink ? 'hover:border-primary hover:shadow-lg hover:shadow-primary/5 cursor-pointer' : 'border-slate-100 opacity-70'}`}
-                    >
-                      {/* RAG badge */}
+                        ${item.hasLink ? 'hover:border-primary hover:shadow-lg hover:shadow-primary/5 cursor-pointer' : 'border-slate-100 opacity-70'}`}>
+
                       {isRagUsed(item.title) && (
                         <div className="absolute top-3 right-3 px-2 py-0.5 bg-primary/10 text-primary text-[9px] font-bold rounded-full border border-primary/20">
-                          RAG'da kullanılıyor
+                          {c.ragBadge}
                         </div>
                       )}
 
@@ -260,9 +267,7 @@ export default function YokMevzuat() {
                           {categoryIcon(cat.name)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 leading-snug pr-8">
-                            {item.title}
-                          </p>
+                          <p className="text-sm font-semibold text-slate-800 leading-snug pr-8">{item.title}</p>
                           <div className="flex items-center gap-2 mt-3">
                             <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${categoryColor(cat.name)}`}>
                               {cat.name.replace(/ler$|lar$/, '').replace(/eler$|alar$/, '')}
@@ -273,13 +278,12 @@ export default function YokMevzuat() {
                                 mevzuat.gov.tr <ExternalLink size={10} />
                               </a>
                             ) : (
-                              <span className="text-[10px] text-slate-400 ml-auto">Bağlantı yok</span>
+                              <span className="text-[10px] text-slate-400 ml-auto">{c.noLink}</span>
                             )}
                           </div>
                         </div>
                       </div>
 
-                      {/* Hover arrow */}
                       {item.hasLink && (
                         <ChevronRight size={16}
                           className="absolute bottom-4 right-4 text-slate-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
@@ -293,14 +297,27 @@ export default function YokMevzuat() {
         </>
       )}
 
-      {/* Footer note */}
+      {/* Footer */}
       {!loading && !error && (
         <div className="text-center text-xs text-slate-400 pt-4 border-t border-slate-100">
-          Veriler <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
-            className="text-primary hover:underline font-semibold">idarimali.yok.gov.tr</a>'den
-          canlı olarak çekilmektedir. Lisans ve yönetmelik metinleri için{' '}
-          <a href="https://www.mevzuat.gov.tr" target="_blank" rel="noreferrer"
-            className="text-primary hover:underline font-semibold">mevzuat.gov.tr</a>'yi ziyaret edin.
+          {language === 'en' ? (
+            <>Data is sourced live from{' '}
+              <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
+                className="text-primary hover:underline font-semibold">idarimali.yok.gov.tr</a>.
+              {' '}Visit{' '}
+              <a href="https://www.mevzuat.gov.tr" target="_blank" rel="noreferrer"
+                className="text-primary hover:underline font-semibold">mevzuat.gov.tr</a>{' '}
+              for full regulation texts.
+            </>
+          ) : (
+            <>Veriler{' '}
+              <a href="https://idarimali.yok.gov.tr/tr/page/318" target="_blank" rel="noreferrer"
+                className="text-primary hover:underline font-semibold">idarimali.yok.gov.tr</a>'den
+              canlı olarak çekilmektedir. Lisans ve yönetmelik metinleri için{' '}
+              <a href="https://www.mevzuat.gov.tr" target="_blank" rel="noreferrer"
+                className="text-primary hover:underline font-semibold">mevzuat.gov.tr</a>'yi ziyaret edin.
+            </>
+          )}
         </div>
       )}
     </div>

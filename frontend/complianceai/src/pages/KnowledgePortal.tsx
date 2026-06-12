@@ -39,14 +39,62 @@ function authHeaders() {
   };
 }
 
-const SUGGESTIONS = [
-  "Yatay geçiş için şartlar ve kontenjanlar nelerdir?",
-  "Azami öğrenim süresi dolan öğrencinin hakları nelerdir?",
-  "Lisansüstü tez savunması için gerekli şartlar nelerdir?",
-  "Çift anadal programına kabul koşulları nelerdir?",
-  "Disiplin cezası kararlarına nasıl itiraz edilir?",
-  "Kayıt dondurma hangi hallerde mümkündür?",
-];
+// ── Translations ──────────────────────────────────────────────────────────────
+
+const copy = {
+  tr: {
+    newChat: 'Yeni Sohbet',
+    noSessions: 'Henüz sohbet yok',
+    messageUnit: (n: number) => `${n} mesaj`,
+    portalTitle: 'YÖK Hukuki Danışman',
+    ragBadge: 'RAG destekli · GPT-4o-mini',
+    emptyTitle: 'Nasıl yardımcı olabilirim?',
+    emptyDesc: 'YÖK mevzuatı hakkında sorularınızı sorun. Cevaplar gerçek kanun ve yönetmelik maddelerine dayandırılır.',
+    thinking: 'Mevzuat inceleniyor...',
+    sources: 'YÖK Mevzuat Kaynakları',
+    placeholder: 'Mevzuat hakkında bir soru sorun... (Enter ile gönder)',
+    disclaimer: 'Yanıtlar YÖK mevzuatına dayandırılmaktadır · Resmi hukuki tavsiye yerine geçmez',
+    errorMsg: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.',
+    timeNow: 'Şimdi',
+    timeMin: 'dk önce',
+    timeHour: 'sa önce',
+    timeDay: 'g önce',
+    suggestions: [
+      'Yatay geçiş için şartlar ve kontenjanlar nelerdir?',
+      'Azami öğrenim süresi dolan öğrencinin hakları nelerdir?',
+      'Lisansüstü tez savunması için gerekli şartlar nelerdir?',
+      'Çift anadal programına kabul koşulları nelerdir?',
+      'Disiplin cezası kararlarına nasıl itiraz edilir?',
+      'Kayıt dondurma hangi hallerde mümkündür?',
+    ],
+  },
+  en: {
+    newChat: 'New Chat',
+    noSessions: 'No chats yet',
+    messageUnit: (n: number) => `${n} message${n !== 1 ? 's' : ''}`,
+    portalTitle: 'YÖK Legal Advisor',
+    ragBadge: 'RAG-powered · GPT-4o-mini',
+    emptyTitle: 'How can I help you?',
+    emptyDesc: 'Ask your questions about YÖK regulations. Answers are grounded in real law and regulation articles.',
+    thinking: 'Reviewing regulations...',
+    sources: 'YÖK Regulation Sources',
+    placeholder: 'Ask a question about regulations... (Enter to send)',
+    disclaimer: 'Answers are grounded in YÖK regulations · Does not replace official legal advice',
+    errorMsg: 'Sorry, an error occurred. Please try again.',
+    timeNow: 'Just now',
+    timeMin: 'min ago',
+    timeHour: 'hr ago',
+    timeDay: 'd ago',
+    suggestions: [
+      'What are the conditions and quotas for lateral transfers?',
+      'What are the rights of students who have exceeded the maximum study period?',
+      'What are the requirements for a graduate thesis defense?',
+      'What are the admission requirements for a double major program?',
+      'How can disciplinary decisions be appealed?',
+      'In which cases can registration be suspended?',
+    ],
+  },
+} as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -66,31 +114,33 @@ function FormattedAnswer({ text }: { text: string }) {
   );
 }
 
-function timeAgo(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return 'Şimdi';
-  if (mins < 60) return `${mins}dk önce`;
-  if (hours < 24) return `${hours}sa önce`;
-  return `${days}g önce`;
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function KnowledgePortal() {
-  const [sessions, setSessions]       = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  const [messages, setMessages]       = useState<Message[]>([]);
-  const [input, setInput]             = useState('');
-  const [loading, setLoading]         = useState(false);
-  const [loadingSessions, setLoadingSessions] = useState(true);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [deletingId, setDeletingId]   = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { language } = useLanguage();
+  const c = copy[language];
+
+  const [sessions, setSessions]               = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [messages, setMessages]               = useState<Message[]>([]);
+  const [input, setInput]                     = useState('');
+  const [loading, setLoading]                 = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [sidebarOpen, setSidebarOpen]         = useState(true);
+  const [deletingId, setDeletingId]           = useState<string | null>(null);
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function timeAgo(iso: string) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins  = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days  = Math.floor(diff / 86400000);
+    if (mins < 1)   return c.timeNow;
+    if (mins < 60)  return `${mins} ${c.timeMin}`;
+    if (hours < 24) return `${hours} ${c.timeHour}`;
+    return `${days} ${c.timeDay}`;
+  }
 
   // ── Fetch session list ──────────────────────────────────────────────────────
   const loadSessions = useCallback(async () => {
@@ -112,8 +162,8 @@ export default function KnowledgePortal() {
       const data: Array<{ question: string; answer: string; createdAt: string }> = await res.json();
       const msgs: Message[] = [];
       data.forEach(m => {
-        msgs.push({ id: `u-${m.createdAt}`, role: 'user', content: m.question, timestamp: new Date(m.createdAt) });
-        msgs.push({ id: `a-${m.createdAt}`, role: 'assistant', content: m.answer, timestamp: new Date(m.createdAt) });
+        msgs.push({ id: `u-${m.createdAt}`, role: 'user',      content: m.question, timestamp: new Date(m.createdAt) });
+        msgs.push({ id: `a-${m.createdAt}`, role: 'assistant', content: m.answer,   timestamp: new Date(m.createdAt) });
       });
       setMessages(msgs);
     } catch { /* silent */ }
@@ -141,12 +191,11 @@ export default function KnowledgePortal() {
   // ── Scroll to bottom ────────────────────────────────────────────────────────
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  // ── Send message ────────────────────────────────────────────────────────────
+  // ── Send message ─────────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text?: string) => {
     const question = (text ?? input).trim();
     if (!question || loading) return;
 
-    // Ensure we have a session
     let sessionId = activeSessionId;
     if (!sessionId) {
       const res = await fetch(`${BASE}/api/chat/sessions`, { method: 'POST', headers: authHeaders() });
@@ -182,20 +231,19 @@ export default function KnowledgePortal() {
           : m
       ));
 
-      // Refresh session list to show new/updated session
       const listRes = await fetch(`${BASE}/api/chat/sessions`, { headers: authHeaders() });
       if (listRes.ok) setSessions(await listRes.json());
 
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === thinkId
-          ? { ...m, content: language === 'en' ? 'Sorry, an error occurred. Please try again.' : 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', isStreaming: false }
+          ? { ...m, content: c.errorMsg, isStreaming: false }
           : m
       ));
     } finally {
       setLoading(false);
     }
-  }, [input, loading, activeSessionId]);
+  }, [input, loading, activeSessionId, language, c.errorMsg]);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -221,7 +269,7 @@ export default function KnowledgePortal() {
             <div className="p-4 border-b border-slate-100">
               <button onClick={newSession}
                 className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-primary text-white rounded-2xl text-sm font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20">
-                <Plus size={16} /> Yeni Sohbet
+                <Plus size={16} /> {c.newChat}
               </button>
             </div>
 
@@ -234,7 +282,7 @@ export default function KnowledgePortal() {
               ) : sessions.length === 0 ? (
                 <div className="text-center py-10 text-slate-400">
                   <MessageSquare size={28} className="mx-auto mb-2 opacity-30" />
-                  <p className="text-xs">Henüz sohbet yok</p>
+                  <p className="text-xs">{c.noSessions}</p>
                 </div>
               ) : (
                 sessions.map(s => (
@@ -249,9 +297,7 @@ export default function KnowledgePortal() {
                       <p className={`text-xs font-medium truncate leading-snug ${activeSessionId === s.session_id ? 'text-primary' : 'text-slate-700'}`}>
                         {s.title}
                       </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {s.count} mesaj
-                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{c.messageUnit(s.count)}</p>
                     </div>
                     <button
                       onClick={e => deleteSession(s.session_id, e)}
@@ -280,9 +326,9 @@ export default function KnowledgePortal() {
           </button>
           <div className="flex items-center gap-2">
             <Scale size={18} className="text-primary" />
-            <span className="font-bold text-slate-800 text-sm">YÖK Hukuki Danışman</span>
+            <span className="font-bold text-slate-800 text-sm">{c.portalTitle}</span>
           </div>
-          <span className="ml-auto text-[10px] text-slate-300 font-medium uppercase tracking-widest">RAG destekli · GPT-4o-mini</span>
+          <span className="ml-auto text-[10px] text-slate-300 font-medium uppercase tracking-widest">{c.ragBadge}</span>
         </div>
 
         {/* Messages */}
@@ -296,14 +342,12 @@ export default function KnowledgePortal() {
                 <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
                   <Scale size={28} className="text-primary" />
                 </div>
-                <h2 className="text-xl font-bold text-slate-800">Nasıl yardımcı olabilirim?</h2>
-                <p className="text-sm text-slate-400 max-w-sm">
-                  YÖK mevzuatı hakkında sorularınızı sorun. Cevaplar gerçek kanun ve yönetmelik maddelerine dayandırılır.
-                </p>
+                <h2 className="text-xl font-bold text-slate-800">{c.emptyTitle}</h2>
+                <p className="text-sm text-slate-400 max-w-sm">{c.emptyDesc}</p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-2xl">
-                {SUGGESTIONS.map((s, i) => (
-                  <motion.button key={s}
+                {c.suggestions.map((s, i) => (
+                  <motion.button key={i}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
                     onClick={() => sendMessage(s)}
@@ -342,7 +386,7 @@ export default function KnowledgePortal() {
                             style={{ animationDelay: `${i * 0.15}s` }} />
                         ))}
                       </div>
-                      <span className="text-xs text-slate-400 font-medium">Mevzuat inceleniyor...</span>
+                      <span className="text-xs text-slate-400 font-medium">{c.thinking}</span>
                     </div>
                   ) : (
                     <div className="bg-white border border-slate-100 px-6 py-5 rounded-2xl rounded-tl-md shadow-sm space-y-4 w-full">
@@ -351,7 +395,7 @@ export default function KnowledgePortal() {
                       {msg.sources && msg.sources.length > 0 && (
                         <div className="pt-3 border-t border-slate-100">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                            <BookOpen size={10} /> YÖK Mevzuat Kaynakları
+                            <BookOpen size={10} /> {c.sources}
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {msg.sources.map((src, i) => (
@@ -369,7 +413,7 @@ export default function KnowledgePortal() {
 
                       <p className="text-[10px] text-slate-300 flex items-center gap-1">
                         <Clock size={9} />
-                        {msg.timestamp.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                        {msg.timestamp.toLocaleTimeString(language === 'en' ? 'en-GB' : 'tr-TR', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   )}
@@ -390,8 +434,8 @@ export default function KnowledgePortal() {
         <div className="shrink-0 px-6 pb-6 pt-3 border-t border-slate-100">
           {hasMessages && !loading && (
             <div className="flex gap-2 flex-wrap mb-3">
-              {SUGGESTIONS.slice(0, 3).map(s => (
-                <button key={s} onClick={() => sendMessage(s)}
+              {c.suggestions.slice(0, 3).map((s, i) => (
+                <button key={i} onClick={() => sendMessage(s)}
                   className="text-[10px] px-3 py-1.5 bg-white border border-slate-200 rounded-full text-slate-500 hover:border-primary hover:text-primary transition-all font-medium">
                   {s.length > 42 ? s.slice(0, 42) + '…' : s}
                 </button>
@@ -400,7 +444,7 @@ export default function KnowledgePortal() {
           )}
           <div className="flex gap-3 items-end bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm focus-within:border-primary focus-within:shadow-md transition-all">
             <textarea ref={textareaRef} rows={1}
-              placeholder="Mevzuat hakkında bir soru sorun... (Enter ile gönder)"
+              placeholder={c.placeholder}
               className="flex-1 resize-none outline-none text-sm text-slate-700 placeholder:text-slate-400 leading-relaxed bg-transparent min-h-[36px] max-h-32"
               value={input}
               onChange={e => {
@@ -417,9 +461,7 @@ export default function KnowledgePortal() {
               {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
             </button>
           </div>
-          <p className="text-center text-[10px] text-slate-300 mt-2">
-            Yanıtlar YÖK mevzuatına dayandırılmaktadır · Resmi hukuki tavsiye yerine geçmez
-          </p>
+          <p className="text-center text-[10px] text-slate-300 mt-2">{c.disclaimer}</p>
         </div>
       </div>
     </div>
