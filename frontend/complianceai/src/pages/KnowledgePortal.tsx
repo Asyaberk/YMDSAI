@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { yokRefToUrl, yokSourceLabel } from '../lib/yokRef';
+import { useLanguage } from '../contexts/LanguageContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export default function KnowledgePortal() {
   const [deletingId, setDeletingId]   = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { language } = useLanguage();
 
   // ── Fetch session list ──────────────────────────────────────────────────────
   const loadSessions = useCallback(async () => {
@@ -169,7 +171,7 @@ export default function KnowledgePortal() {
       const res = await fetch(`${BASE}/api/chat`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ question, session_id: sessionId }),
+        body: JSON.stringify({ question, session_id: sessionId, language }),
       });
       if (!res.ok) throw new Error();
       const data: { answer: string; sources: Source[]; session_id: string } = await res.json();
@@ -187,7 +189,7 @@ export default function KnowledgePortal() {
     } catch {
       setMessages(prev => prev.map(m =>
         m.id === thinkId
-          ? { ...m, content: 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', isStreaming: false }
+          ? { ...m, content: language === 'en' ? 'Sorry, an error occurred. Please try again.' : 'Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.', isStreaming: false }
           : m
       ));
     } finally {

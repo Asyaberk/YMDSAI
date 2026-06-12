@@ -386,7 +386,65 @@ KRİTİK KURALLAR:
 - suggestion: Üniversite belgesinde yapılacak değişikliği yaz, YÖK'teki değişikliği değil.
 """
 
-ARTICLE_USER = """## İncelenen Üniversite Yönetmeliği Maddesi
+# ── English variant (status labels remain canonical Turkish) ─────────────────
+ARTICLE_SYSTEM_EN = """You are an expert auditor in Turkish higher education law.
+You will be given ONE ARTICLE from a university policy document and reference YÖK regulation excerpts.
+
+CORE PRINCIPLE: Compliance means satisfying the intent and provisions set by YÖK — not word-for-word identity.
+Universities may adapt YÖK regulations to their own institutional language; this is normal and counts as Compliant.
+
+COMPLIANCE DEFINITIONS (4 options — use EXACTLY these Turkish status values):
+- Uyumlu: The article satisfies the topic regulated by YÖK. Even if phrased differently, it pursues the same
+  objective, covers what YÖK mandates, and does not conflict with any YÖK provision.
+- Kısmen Uyumlu: The article is generally in the right direction but: (a) a specific element required by YÖK
+  is missing, or (b) vague/ambiguous wording does not fully satisfy YÖK's clear provision.
+  Also use Kısmen Uyumlu if the provided YÖK excerpts are only indirectly related to this article.
+- Uyumsuz: Use Uyumsuz if any of these concrete conditions apply:
+  (a) A numeric threshold/duration/ratio set by YÖK differs in the document;
+  (b) A mandatory approval body/procedure required by YÖK is entirely absent;
+  (c) A practice prohibited by YÖK is present in the document;
+  (d) A right or protection defined by YÖK is restricted or completely absent.
+  NOTE: Different wording or missing detail alone is NOT Uyumsuz — use Kısmen Uyumlu in that case.
+- Kapsam Dışı: Use ONLY in these two cases:
+  (1) This topic is not regulated anywhere in YÖK legislation; it is a purely administrative/organisational
+      matter left entirely to the university (e.g. campus security, cafeteria management, internal meeting schedules).
+  (2) The article contains only a transitional/temporary provision not conflicting with any permanent YÖK standard.
+  IMPORTANT: If the topic is any of the following, Kapsam Dışı is FORBIDDEN — use Kısmen Uyumlu instead:
+  Exams, grading systems, GPA/CGPA, course registration, leave of absence, graduation, scholarships,
+  disciplinary matters, academic calendar, curriculum, credit system, student admission, exemptions,
+  credit transfer, double major/minor programmes.
+
+OUTPUT: Respond ONLY with the following JSON (no other text). Write reasoning and suggestion in English.
+The status field MUST use one of these exact Turkish strings: Uyumlu | Kısmen Uyumlu | Uyumsuz | Kapsam Dışı
+{
+  "status": "<Uyumlu|Kısmen Uyumlu|Uyumsuz|Kapsam Dışı>",
+  "similarity": <float 0.0–1.0 — semantic overlap, not surface similarity>,
+  "yok_reference": "<relevant YÖK regulation name and article; empty string if none found>",
+  "yok_text": "<verbatim quote from the PROVIDED YÖK excerpts: copy the single most relevant sentence word-for-word>",
+  "reasoning": [
+    "<why this status: what does the document say, what does YÖK say, do they satisfy the same purpose?>",
+    "<any gap or conflict; or why the article was deemed compliant>"
+  ],
+  "suggestion": "<ONLY for Kısmen Uyumlu/Uyumsuz: what should be changed/added in the university policy? Format: 'The wording X should be changed to Y'. Empty string if Uyumlu.>"
+}
+
+CRITICAL RULES:
+- Different wording ≠ Uyumsuz. If the meaning is equivalent, use Uyumlu.
+- If you can name a YÖK regulation in yok_reference, you cannot use Kapsam Dışı.
+- If the provided YÖK excerpts are only indirectly related: use Kısmen Uyumlu with similarity 0.2–0.4.
+- yok_text: MUST be taken verbatim from the PROVIDED excerpts. Do not paraphrase.
+- suggestion: Describe changes to the university document, not to YÖK.
+"""
+
+ARTICLE_USER = """## University Policy Article Under Review
+{article_text}
+
+## Reference YÖK Regulation Excerpts (Sole Authoritative Source)
+{chunks}
+
+Provide JSON analysis."""
+
+ARTICLE_USER_TR = """## İncelenen Üniversite Yönetmeliği Maddesi
 {article_text}
 
 ## Referans YÖK Mevzuat Parçaları (Tek Doğru Kaynak)
@@ -480,9 +538,10 @@ class RagService:
     Supports per-article analysis to handle large documents fully.
     """
 
-    def __init__(self, pipeline: str = "hybrid", model: str = "gpt-4o-mini"):
+    def __init__(self, pipeline: str = "hybrid", model: str = "gpt-4o-mini", language: str = "tr"):
         self.pipeline = pipeline
         self.model    = model
+        self.language = language
 
     def _retrieve(self, query: str, k: int = TOP_K) -> List[Dict]:
         if self.pipeline == "bm25":
@@ -509,12 +568,15 @@ class RagService:
 
         chunks_str = _format_chunks(retrieved) if retrieved else "İlgili mevzuat parçası bulunamadı."
 
+        sys_prompt = ARTICLE_SYSTEM_EN if self.language == "en" else ARTICLE_SYSTEM
+        usr_template = ARTICLE_USER if self.language == "en" else ARTICLE_USER_TR
+
         try:
             resp = _oa_client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": ARTICLE_SYSTEM},
-                    {"role": "user", "content": ARTICLE_USER.format(
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": usr_template.format(
                         article_text=article["text"][:4000],  # full article, no artificial cut
                         chunks=chunks_str[:4000],
                     )},
@@ -529,12 +591,13 @@ class RagService:
             result = None
 
         if not result:
+            fallback_msg = "Analysis could not be completed." if self.language == "en" else "Analiz tamamlanamadı."
             result = {
                 "status": "Kısmen Uyumlu",
                 "similarity": 0.5,
                 "yok_reference": "",
                 "yok_text": "",
-                "reasoning": ["Analiz tamamlanamadı."],
+                "reasoning": [fallback_msg],
                 "suggestion": "",
             }
 

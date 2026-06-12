@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { documents, DocumentDetail } from '../lib/api';
+import { useLanguage } from '../contexts/LanguageContext';
 
 type Pipeline = 'bm25' | 'dense' | 'hybrid';
 type Model    = 'gpt-4o-mini' | 'gpt-4o';
@@ -26,6 +27,7 @@ const MODELS: { id: Model; label: string; desc: string; badge?: string }[] = [
 
 export default function FileUpload() {
   const navigate = useNavigate();
+  const { language } = useLanguage();
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [pipeline, setPipeline]     = useState<Pipeline>('hybrid');
@@ -62,7 +64,7 @@ export default function FileUpload() {
 
     try {
       // Analyze the first file (one at a time)
-      const res = await documents.upload(uploadedFiles[0].file, pipeline, model);
+      const res = await documents.upload(uploadedFiles[0].file, pipeline, model, language);
       setResult(res);
       setStep(3);
     } catch (e: any) {

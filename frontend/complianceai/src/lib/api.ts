@@ -91,11 +91,12 @@ export const documents = {
 
   pdfUrl: (id: string) => `${BASE}/documents/${id}/pdf`,
 
-  upload: (file: File, pipeline = 'hybrid', model = 'gpt-4o-mini') => {
+  upload: (file: File, pipeline = 'hybrid', model = 'gpt-4o-mini', language = 'tr') => {
     const token = getToken();
     const form = new FormData();
     form.append('file', file);
-    return fetch(`${BASE}/analyze?pipeline=${pipeline}&model=${model}`, {
+    const params = new URLSearchParams({ pipeline, model, language });
+    return fetch(`${BASE}/analyze?${params.toString()}`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
@@ -163,8 +164,10 @@ export const admin = {
 export interface ChatMessage { question: string; answer: string; createdAt: string; }
 
 export const chat = {
-  send:    (question: string) => request<{ answer: string; sources: string[] }>('/chat', {
-    method: 'POST', body: JSON.stringify({ question }),
-  }),
+  send:    (question: string, language = 'tr', session_id?: string) =>
+    request<{ answer: string; sources: string[] }>('/chat', {
+      method: 'POST',
+      body: JSON.stringify({ question, language, session_id }),
+    }),
   history: () => request<ChatMessage[]>('/chat/history'),
 };

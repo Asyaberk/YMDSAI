@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Query, Header, HTTPExc
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
-from typing import List, Optional
+from typing import List, Optional, Literal
 import pandas as pd
 from datetime import datetime
 
@@ -60,6 +60,7 @@ async def analyze_document(
     file: UploadFile = File(...),
     pipeline: str = Query("hybrid", enum=["bm25", "dense", "hybrid"]),
     model: str = Query("gpt-4o-mini", enum=["gpt-4o-mini", "gpt-4o"]),
+    language: str = Query("tr", enum=["tr", "en"]),
     db: Session = Depends(get_db),
     current_user=Depends(_require_user),
 ):
@@ -70,7 +71,7 @@ async def analyze_document(
     full_text = _clean_full_text("\n\n".join(chunks))
 
     # RAG analysis
-    svc = RagService(pipeline=pipeline, model=model)
+    svc = RagService(pipeline=pipeline, model=model, language=language)
     results = svc.analyze_document(full_text, file.filename)
 
     # Compute real article stats from results
@@ -595,6 +596,7 @@ def admin_delete_document(doc_id: str, db: Session = Depends(get_db), _=Depends(
 class ChatRequest(BaseModel):
     question: str
     session_id: str | None = None   # if None → auto-assigned to active session
+    language: Literal["tr", "en"] = "tr"
 
 @router.post("/chat")
 def chat(body: ChatRequest, db: Session = Depends(get_db), current_user=Depends(_require_user)):
@@ -614,13 +616,22 @@ def chat(body: ChatRequest, db: Session = Depends(get_db), current_user=Depends(
     is_on_topic = any(kw in q_lower for kw in yok_keywords)
 
     if not is_on_topic:
-        off_topic_answer = (
-            "Bu soru Türk yükseköğretim mevzuatı kapsamında değil. "
-            "Ben yalnızca YÖK kanunları, yönetmelikler, üniversite mevzuatı ve "
-            "öğrenci/personel hakları gibi konularda bilgi verebilirim. \n\n"
-            "Lütfen sorunuzu bu konularla ilgili olacak şekilde yeniden sorunuz. "
-            "Örneğin: 'Azami öğrenim süresi nedir?', 'Yatay geçiş şartları nelerdir?' gibi."
-        )
+        if body.language == "en":
+            off_topic_answer = (
+                "This question is outside the scope of Turkish higher education legislation. "
+                "I can only provide information on YÖK laws, regulations, university policies, "
+                "and student/staff rights.\n\n"
+                "Please rephrase your question accordingly. "
+                "For example: 'What is the maximum study period?' or 'What are the conditions for lateral transfer?'"
+            )
+        else:
+            off_topic_answer = (
+                "Bu soru Türk yükseköğretim mevzuatı kapsamında değil. "
+                "Ben yalnızca YÖK kanunları, yönetmelikler, üniversite mevzuatı ve "
+                "öğrenci/personel hakları gibi konularda bilgi verebilirim. \n\n"
+                "Lütfen sorunuzu bu konularla ilgili olacak şekilde yeniden sorunuz. "
+                "Örneğin: 'Azami öğrenim süresi nedir?', 'Yatay geçiş şartları nelerdir?' gibi."
+            )
         db.add(domain.ChatMessageModel(
             user_id=current_user.id,
             session_id=body.session_id,
@@ -630,7 +641,33 @@ def chat(body: ChatRequest, db: Session = Depends(get_db), current_user=Depends(
         db.commit()
         return {"answer": off_topic_answer, "sources": [], "session_id": body.session_id}
 
-    system = """Sen Türk yükseköğretim hukuku alanında uzman, deneyimli bir akademik hukukçusun.
+    if body.language == "en":
+        system = """You are an expert academic legal advisor specialising in Turkish higher education law.
+Your role: Answer questions ONLY about YÖK legislation, Turkish higher education laws, university regulations, and student/staff rights.
+
+STRICT RULE: If the topic is unrelated to higher education legislation (e.g. software, history, science, daily life),
+do NOT answer. Instead say: "This topic falls outside the scope of YÖK legislation."
+
+RESPONSE FORMAT:
+
+1. **Legal Basis:** Cite the relevant law or regulation with its full name and article number.
+   Example: "Pursuant to Article 44 of Law No. 2547 on Higher Education..."
+
+2. **Explanation:** Explain the article's meaning from both a legal and practical perspective.
+   Write as if explaining to a student or university administrator; simplify technical language.
+
+3. **Important Exceptions / Caveats:** Note cases where the article does not apply or special conditions.
+
+4. **Conclusion and Recommendation:** End with a clear conclusion. Advise what should be done.
+
+RULES:
+- Clearly state which law/regulation article you are referencing (law number + article number).
+- Base your answer only on the provided regulation texts; do not fabricate information.
+- If the regulation text is insufficient, state this explicitly.
+- Write in English, professional but accessible.
+- Write at least 3 paragraphs; do not be superficial."""
+    else:
+        system = """Sen Türk yükseköğretim hukuku alanında uzman, deneyimli bir akademik hukukçusun.
 Görevin: Yalnızca YÖK mevzuatı, Türk yükseköğretim kanunları, üniversite yönetmelikleri ve öğrenci/personel hakları hakkında sorulara cevap vermek.
 
 KESİN KURAL: Sorulan konu yükseköğretim mevzuatıyla ilgili değilse (ör. yazılım, tarih, fen bilimleri, günlük yaşam vs.) 
@@ -655,7 +692,8 @@ KURALLAR:
 - Türkçe yaz, profesyonel ama anlaşılır bir dil kullan.
 - En az 3 paragraf yaz; yüzeysel kalma."""
 
-    user_msg = f"Mevzuat Metinleri:\n{context[:4000]}\n\nSoru: {body.question}"
+
+    user_msg = f"Mevzuat Metinleri:\n{context[:4000]}\n\nSoru: {body.question}" if body.language == "tr" else f"Regulation Texts:\n{context[:4000]}\n\nQuestion: {body.question}"
 
     resp = _oa_client.chat.completions.create(
         model="gpt-4o-mini",
