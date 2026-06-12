@@ -1,4 +1,5 @@
 import React from 'react';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface LogoProps {
   className?: string;
@@ -7,6 +8,7 @@ interface LogoProps {
 }
 
 export default function Logo({ className = "", size = 40, showText = true }: LogoProps) {
+  const { t } = useLanguage();
   const checkSize = Math.round(size * 0.38);
 
   return (
@@ -77,7 +79,7 @@ export default function Logo({ className = "", size = 40, showText = true }: Log
             YMDS<span className="text-primary">AI</span>
           </span>
           <span className="text-[9.5px] text-slate-400 font-bold uppercase tracking-[0.18em] mt-[3px]">
-            YÖK Mevzuatı Denetim Sistemi
+            {t('logoSubtitle')}
           </span>
         </div>
       )}

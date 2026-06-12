@@ -10,11 +10,13 @@ import KnowledgePortal from './pages/KnowledgePortal';
 import Landing from './pages/Landing';
 import AdminDashboard from './pages/AdminDashboard';
 import YokMevzuat from './pages/YokMevzuat';
+import { useLanguage } from './contexts/LanguageContext';
 
 function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) {
   const { user, isLoading } = useAuth();
+  const { t } = useLanguage();
   
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center">{t('loading')}</div>;
   if (!user) return <Navigate to="/welcome" replace />;
   if (adminOnly && user.role !== 'ADMIN') return <Navigate to="/" replace />;
   

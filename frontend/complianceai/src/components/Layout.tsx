@@ -21,6 +21,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion } from 'motion/react';
 import Logo from './Logo';
+import { useLanguage } from '../contexts/LanguageContext';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -31,18 +32,19 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showHelp, setShowHelp] = useState(false);
+  const { language, setLanguage, t } = useLanguage();
 
   const userNavItems = [
-    { name: 'Genel Bakış',       path: '/',          icon: LayoutDashboard, desc: 'Sistem genelindeki uyum verilerini ve özet istatistikleri takip edin.' },
-    { name: 'Belge Yükle',       path: '/upload',    icon: Upload,          desc: 'Analiz edilmesini istediğiniz üniversite yönetmelik taslaklarını sisteme yükleyin.' },
-    { name: 'Uyumluluk Analizleri', path: '/analysis',  icon: FileSearch,      desc: 'Yüklenen belgelerinizi listeleyin, inceleyin, silin veya madde madde YÖK uyum analizini görün.' },
-    { name: 'Bilgi Portalı',     path: '/portal',    icon: Search,          desc: 'Mevzuat hakkındaki sorularınızı yapay zekaya sorun, yasal dayanaklı cevaplar alın.' },
-    { name: 'YÖK Mevzuatı',      path: '/mevzuat',   icon: Scale,           desc: 'Türk yükseköğretim mevzuatının güncel listesini inceleyin, dayanak mevzuatlara ulaşın.' },
+    { name: t('overview'), path: '/', icon: LayoutDashboard, desc: t('overviewDesc') },
+    { name: t('upload'), path: '/upload', icon: Upload, desc: t('uploadDesc') },
+    { name: t('analyses'), path: '/analysis', icon: FileSearch, desc: t('analysesDesc') },
+    { name: t('portal'), path: '/portal', icon: Search, desc: t('portalDesc') },
+    { name: t('regulations'), path: '/mevzuat', icon: Scale, desc: t('regulationsDesc') },
   ];
 
   const adminNavItems = [
-    { name: 'Yönetim Paneli', path: '/admin', icon: Settings, desc: 'Sisteme referans olacak YÖK mevzuatlarını ve kullanıcı yetkilerini yönetin.' },
-    { name: 'RAG Karşılaştırma', path: '/experiments', icon: FlaskConical, desc: 'Farklı yapay zeka modellerinin performansını deneysel olarak karşılaştırın.' },
+    { name: t('adminPanel'), path: '/admin', icon: Settings, desc: t('adminDesc') },
+    { name: t('experiments'), path: '/experiments', icon: FlaskConical, desc: t('experimentsDesc') },
   ];
 
   const navItems = user?.role === 'ADMIN' ? [...userNavItems, ...adminNavItems] : userNavItems;
@@ -57,7 +59,7 @@ export default function Layout() {
 
         <nav className="flex-1 px-4 py-6 space-y-8">
           <div>
-            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Ana Menü</p>
+            <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{t('mainMenu')}</p>
             <div className="space-y-1">
               {userNavItems.map((item) => (
                 <NavLink
@@ -79,7 +81,7 @@ export default function Layout() {
 
           {user?.role === 'ADMIN' && (
             <div>
-              <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Yönetim</p>
+              <p className="px-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">{t('management')}</p>
               <div className="space-y-1">
                 {adminNavItems.map((item) => (
                   <NavLink
@@ -108,7 +110,7 @@ export default function Layout() {
              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 rounded-xl transition-all"
           >
              <HelpCircle size={18} />
-             <span>Kullanım Yardımı</span>
+             <span>{t('help')}</span>
           </button>
           
           <div className="bg-white border border-gray-100 p-4 rounded-2xl shadow-sm space-y-3">
@@ -116,14 +118,14 @@ export default function Layout() {
                <img src={user?.avatar} alt="avatar" className="w-8 h-8 rounded-full border border-gray-200" />
                <div className="overflow-hidden">
                   <p className="text-xs font-bold text-slate-700 truncate">{user?.name}</p>
-                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{user?.role === 'ADMIN' ? 'Yönetici' : 'Kullanıcı'}</p>
+                  <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{user?.role === 'ADMIN' ? t('admin') : t('user')}</p>
                </div>
             </div>
             <button 
               onClick={logout}
               className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-danger hover:bg-danger/5 rounded-lg transition-all"
             >
-              <LogOut size={14} /> Çıkış Yap
+              <LogOut size={14} /> {t('logout')}
             </button>
           </div>
         </div>
@@ -137,21 +139,30 @@ export default function Layout() {
           ['/admin', '/experiments'].includes(location.pathname) ? "bg-slate-900 border-slate-800 text-white" : "bg-white/80 border-gray-100 text-slate-900"
         )}>
            <div className="flex items-center gap-2">
-              <span className={cn("text-sm", ['/admin', '/experiments'].includes(location.pathname) ? "text-slate-500" : "text-slate-400")}>Dashboard</span>
+              <span className={cn("text-sm", ['/admin', '/experiments'].includes(location.pathname) ? "text-slate-500" : "text-slate-400")}>{t('dashboard')}</span>
               <ChevronRight size={14} className={['/admin', '/experiments'].includes(location.pathname) ? "text-slate-700" : "text-slate-300"} />
               <span className="font-medium text-sm">{currentNavItem?.name}</span>
            </div>
            
            <div className="flex items-center gap-4">
+              <div className="flex rounded-lg border border-slate-200 p-0.5 text-[11px] font-bold bg-white text-slate-600">
+                {(['tr', 'en'] as const).map(code => (
+                  <button key={code} type="button" onClick={() => setLanguage(code)}
+                    aria-pressed={language === code}
+                    className={cn('px-2.5 py-1 rounded-md transition-colors', language === code && 'bg-primary text-white')}>
+                    {code.toUpperCase()}
+                  </button>
+                ))}
+              </div>
               {!['/admin', '/experiments'].includes(location.pathname) && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-success/10 text-success rounded-full text-xs font-bold border border-success/10">
                    <div className="w-1.5 h-1.5 bg-success rounded-full animate-pulse" />
-                   Mevzuat Güncel · {new Date().getFullYear()}
+                   {t('regulationsCurrent')} · {new Date().getFullYear()}
                 </div>
               )}
               {['/admin', '/experiments'].includes(location.pathname) && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-academic text-white rounded-full text-[10px] font-bold uppercase tracking-widest">
-                   Yönetici Erişimi
+                   {t('adminAccess')}
                 </div>
               )}
               <button 
@@ -162,7 +173,7 @@ export default function Layout() {
                 )}
               >
                  <Info size={20} />
-                 <span className="absolute bottom-full right-0 mb-2 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity border border-white/10">Sayfa Bilgisi</span>
+                 <span className="absolute bottom-full right-0 mb-2 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity border border-white/10">{t('pageInfo')}</span>
               </button>
            </div>
         </header>
@@ -192,7 +203,7 @@ export default function Layout() {
             <div className="p-8 border-b border-gray-100 flex items-center justify-between">
                <div className="flex items-center gap-3">
                   <HelpCircle size={28} className="text-primary" />
-                  <h2 className="text-2xl font-medium tracking-tight text-slate-900">Nasıl Kullanılır?</h2>
+                  <h2 className="text-2xl font-medium tracking-tight text-slate-900">{t('howTo')}</h2>
                </div>
                <button onClick={() => setShowHelp(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all text-slate-400">
                   <X size={24} />
@@ -203,35 +214,30 @@ export default function Layout() {
                <section className="space-y-4">
                   <h3 className="font-medium text-lg flex items-center gap-2 text-slate-800">
                      <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                     Belge Analiz Süreci
+                     {t('helpAnalysisTitle')}
                   </h3>
                   <p className="text-slate-500 text-sm leading-relaxed">
-                     Sistem temel olarak üniversite yönetmelik taslaklarınızı YÖK'ün güncel mevzuatıyla karşılaştırır. 
-                     <b> "Belge Yükle"</b> sayfasından PDF dosyanızı yükleyerek başlayabilirsiniz. 
-                     Yükleme sonrası <b> "Analizi Başlat"</b> butonu ile yapay zekayı devreye sokarsınız.
+                     {t('helpAnalysis')}
                   </p>
                </section>
 
                <section className="space-y-4">
                   <h3 className="font-medium text-lg flex items-center gap-2 text-slate-800">
                      <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                     Analiz Sonuçlarını Okuma
+                     {t('helpResultsTitle')}
                   </h3>
                   <p className="text-slate-500 text-sm leading-relaxed">
-                     <b>"Uyumluluk Analizi"</b> sekmesinde, her bir madde için puanlama görürsünüz. 
-                     Kısmen uyumlu veya uyumsuz maddelerin üzerine tıklayarak yapay zekanın "Akıl Yürütme" (Chain-of-Thought) sürecini inceleyebilir, 
-                     hata tespit edilen kısımlar için sunulan düzeltme önerilerini görebilirsiniz.
+                     {t('helpResults')}
                   </p>
                </section>
 
                <section className="space-y-4">
                   <h3 className="font-medium text-lg flex items-center gap-2 text-slate-800">
                      <span className="w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                     Akıllı Mevzuat Botu
+                     {t('helpBotTitle')}
                   </h3>
                   <p className="text-slate-500 text-sm leading-relaxed">
-                     <b>"Bilgi Portalı"</b> üzerinden mevzuatla ilgili herhangi bir konuda doğal dilde sorular sorabilirsiniz. 
-                     Sistem size cevap verirken cevabını dayandırdığı mevzuat maddelerini ve metin parçalarını da (RAG) referans olarak sunar.
+                     {t('helpBot')}
                   </p>
                </section>
             </div>
@@ -241,7 +247,7 @@ export default function Layout() {
                   onClick={() => setShowHelp(false)}
                   className="btn-primary"
                >
-                  Anladım, Kapat
+                  {t('close')}
                </button>
             </div>
           </div>
