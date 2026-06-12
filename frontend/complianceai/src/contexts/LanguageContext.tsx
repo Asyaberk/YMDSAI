@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 export type Language = 'tr' | 'en';
 
@@ -107,10 +107,50 @@ const uiTerms: Record<string, string> = {
   'Başlangıç Tarihi': 'Start Date', 'Bitiş Tarihi': 'End Date', 'Rapor Oluştur': 'Generate Report',
   'PDF Görüntüleyici': 'PDF Viewer', 'Yakınlaştır': 'Zoom In', 'Uzaklaştır': 'Zoom Out',
   'Önceki Sayfa': 'Previous Page', 'Sonraki Sayfa': 'Next Page', 'Sayfa': 'Page',
+  // FileUpload page
+  'LLM Modeli': 'LLM Model',
+  'Anahtar kelime tabanlı — hızlı, deterministik': 'Keyword-based — fast, deterministic',
+  'Vektör arama — anlam odaklı': 'Vector search — semantics-focused',
+  'BM25 + Dense birleşimi — en yüksek doğruluk': 'BM25 + Dense fusion — highest accuracy',
+  '19× daha ucuz, neredeyse aynı doğruluk': '19× cheaper, nearly identical accuracy',
+  'En yüksek kalite, yüksek maliyet': 'Highest quality, higher cost',
+  'SEMANTİK KONTROL AKTİF': 'SEMANTIC CHECK ACTIVE',
+  'REFERANS TAKİBİ ETKİN': 'REFERENCE TRACKING ACTIVE',
+  'Seçilen pipeline ile YÖK mevzuatı taranır, GPT ile madde bazlı uyum analizi yapılır. Sonuçlar veritabanına kaydedilir.': 'The selected pipeline searches YÖK regulations; GPT performs article-level compliance analysis. Results are saved to the database.',
+  // Dashboard
+  'Sistem Durumu': 'System Status', 'Toplam Analiz': 'Total Analyses', 'Uyum Oranı': 'Compliance Rate',
+  'Son 30 Gün': 'Last 30 Days', 'Analiz Trendi': 'Analysis Trend',
+  'Kategori Dağılımı': 'Category Distribution', 'Hızlı Erişim': 'Quick Access',
+  'Sisteme Hoş Geldiniz': 'Welcome to the System',
+  // Admin
+  'Tüm Belgeler': 'All Documents', 'Tüm Kullanıcılar': 'All Users',
+  'Sistem İstatistikleri': 'System Statistics',
+  // Reports
+  'Filtrele': 'Filter', 'Dışa Aktar': 'Export', 'Rapor İndir': 'Download Report',
+  'Seçili Dönem': 'Selected Period',
+  // YOK
+  'Mevzuat Listesi': 'Regulation List', 'Kaynak Görüntüle': 'View Source',
+  'Güncelleniyor...': 'Updating...', 'Mevzuat bulunamadı': 'No regulations found',
+  // Experiments
+  'Gecikme (sn)': 'Latency (s)', 'Maliyet ($)': 'Cost ($)', 'En İyi Yapılandırma': 'Best Configuration',
+  // Knowledge Portal
+  'Yeni Konuşma': 'New Conversation', 'Konuşma Geçmişi': 'Conversation History',
+  'Soru sor...': 'Ask a question...', 'Kaynak bulunamadı': 'No sources found',
+  // ComplianceAnalysis
+  'Analiz Detayı': 'Analysis Detail', 'Geri Dön': 'Go Back',
+  'Filtreleme': 'Filtering', 'Referans': 'Reference',
+  'Gereke': 'Reasoning', 'Öneri': 'Suggestion',
+  // Landing (Landing.tsx now uses direct bilingual copy object, these are for other pages)
+  'Hesabınızı Oluşturun': 'Create Your Account', 'Tekrar Hoş Geldiniz': 'Welcome Back',
+  'Birim Üyesi': 'Staff Member', 'Yönetici': 'Administrator',
+  'Kullanıcı Türü': 'Account Type', 'E-Posta Adresi': 'Email Address',
+  'Lütfen bekleyin...': 'Please wait...', 'Hesabı Başlat': 'Create Account',
+  'YÖK Uyumlu': 'YÖK Compliant', 'Hata Tespit': 'Issues Found',
+  'YÖK Uyumu İçin Tek Platform': 'The Single Platform for YÖK Compliance',
 };
 
 const phraseTerms: Array<[string, string]> = [
-  ['madde analiz edildi', 'articles analyzed'], ['madde düzeltilmeli', 'articles require revision'],
+  ['madde analiz edildi', 'articles analyzed'], ['madde düzetilmeli', 'articles require revision'],
   ['belge gösteriliyor', 'documents displayed'], ['En son güncelleme:', 'Last updated:'],
   ['belge · Üyelik:', 'documents · Joined:'], ['test vakası', 'test cases'],
   ['Analiz sırasında bir hata oluştu', 'An error occurred during analysis'],
@@ -121,6 +161,20 @@ const phraseTerms: Array<[string, string]> = [
   ['Mevzuat denetim süreçleri ve güncel veri özeti.', 'Regulatory review processes and current data summary.'],
   ['Yüklenen tüm yönetmelik analizleri.', 'All uploaded policy analyses.'],
   ['Belge adı ara...', 'Search document name...'], ['kullanıcı', 'users'],
+  ['Belge YÖK mevzuat veritabanında taranıyor', 'Document is being scanned in the YÖK regulation database'],
+  ['90–180 saniye sürebilir', 'may take 90–180 seconds'],
+  ['Lütfen bekleyin...', 'Please wait...'],
+  ['şimdiden kullanmaya başladı', 'are already using it'],
+  ['Kredi kartı gerekmez', 'No credit card required'],
+  ['Anında erişim', 'Instant access'],
+  ['Türkçe destek', 'Turkish support'],
+  ['YÜkSEKÖĞTİM KURULU mevzuatıyla uyum artık elle takip edilmiyor', 'Compliance with YÖK regulations is no longer tracked manually'],
+  ['madde madde analiz edin', 'analyse article by article'],
+  ['uyumsuzlukları anında görün, somut düzeltme önerileri alın', 'spot non-compliance instantly and receive concrete correction suggestions'],
+  ['Belgenizi yükleyin, yapay zeka geri kalanını halleder', 'Upload your document, AI handles the rest'],
+  ['Mevzuat değişikliklerini manuel takip etme zahmetinden kurtulun', 'Stop tracking regulatory changes manually'],
+  ['Üniversitenizin yönetmelik süreçlerini dijitalleştirin', 'Digitise your university’s policy processes'],
+  ['Hukuki riskler fark edilmeden önce gelin', 'Identify legal risks before they surface'],
 ];
 
 export function localizeText(value: string, language: Language): string {
@@ -148,55 +202,10 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => localStorage.getItem('ymds_language') === 'en' ? 'en' : 'tr');
-  const originalTextRef = useRef(new WeakMap<Text, string>());
-  const originalAttributesRef = useRef(new WeakMap<Element, Map<string, string>>());
 
   useEffect(() => {
     localStorage.setItem('ymds_language', language);
     document.documentElement.lang = language;
-  }, [language]);
-
-  useEffect(() => {
-    const originalText = originalTextRef.current;
-    const originalAttributes = originalAttributesRef.current;
-    const attributes = ['placeholder', 'title', 'aria-label'];
-
-    const translateNode = (node: Node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        const textNode = node as Text;
-        const original = originalText.get(textNode) ?? textNode.data;
-        originalText.set(textNode, original);
-        const next = localizeText(original, language);
-        if (textNode.data !== next) textNode.data = next;
-        return;
-      }
-
-      if (!(node instanceof Element) || node.closest('script, style')) return;
-      let saved = originalAttributes.get(node);
-      if (!saved) {
-        saved = new Map();
-        originalAttributes.set(node, saved);
-      }
-      attributes.forEach(attribute => {
-        const current = node.getAttribute(attribute);
-        if (current === null) return;
-        if (!saved!.has(attribute)) saved!.set(attribute, current);
-        const original = saved!.get(attribute)!;
-        const next = localizeText(original, language);
-        if (current !== next) node.setAttribute(attribute, next);
-      });
-      node.childNodes.forEach(translateNode);
-    };
-
-    translateNode(document.body);
-    const observer = new MutationObserver(records => {
-      records.forEach(record => {
-        if (record.type === 'characterData') translateNode(record.target);
-        record.addedNodes.forEach(translateNode);
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-    return () => observer.disconnect();
   }, [language]);
 
   const value = useMemo(() => ({
