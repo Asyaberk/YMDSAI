@@ -148,25 +148,34 @@ SYS = ("Sen Türk yükseköğretim mevzuatı uyum uzmanısın. "
        '{"compliance_score":<0-100>,"label":"<compliant|partial|non-compliant>",'
        '"explanation":"<kısa Türkçe açıklama>"}')
 
-def llm_eval(process, query, chunks_retrieved, model):
+def llm_eval(process, query, chunks_retrieved, model, max_retries=3):
     ctx = "\n\n".join(f"[{c['id']}] {c['text']}" for c in chunks_retrieved)
     msg = (f"## Prosedür\n{process[:800]}\n\n"
            f"## Soru\n{query}\n\n"
            f"## YÖK Mevzuat Parçaları\n{ctx[:3000]}\n\nJSON yanıt:")
     pin, pout = PRICING[model]
-    t0 = time.time()
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[{"role":"system","content":SYS},{"role":"user","content":msg}],
-        temperature=0.0, max_tokens=300
-    )
-    lat  = round(time.time()-t0, 3)
-    raw  = resp.choices[0].message.content
-    cost = (resp.usage.prompt_tokens*pin + resp.usage.completion_tokens*pout)/1e6
-    m    = re.search(r"\{.*\}", raw, re.DOTALL)
-    ans  = json.loads(m.group()) if m else {"compliance_score":50,"label":"partial","explanation":"parse error"}
-    ans.update({"latency":lat,"cost_usd":cost})
-    return ans
+    for attempt in range(max_retries):
+        try:
+            t0 = time.time()
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role":"system","content":SYS},{"role":"user","content":msg}],
+                temperature=0.0, max_tokens=300
+            )
+            lat  = round(time.time()-t0, 3)
+            raw  = resp.choices[0].message.content
+            cost = (resp.usage.prompt_tokens*pin + resp.usage.completion_tokens*pout)/1e6
+            m    = re.search(r"\{.*\}", raw, re.DOTALL)
+            ans  = json.loads(m.group()) if m else {"compliance_score":50,"label":"partial","explanation":"parse error"}
+            ans.update({"latency":lat,"cost_usd":cost})
+            return ans
+        except openai.RateLimitError as e:
+            if "insufficient_quota" in str(e):
+                raise  # Kota bitti — retry çare değil
+            wait = 60 * (attempt + 1)
+            print(f"\n  ⏳ Rate limit — {wait}s bekleniyor (deneme {attempt+1}/{max_retries})...", flush=True)
+            time.sleep(wait)
+    raise RuntimeError(f"LLM çağrısı {max_retries} denemede başarısız.")
 
 # ── Metrics ─────────────────────────────────────────────────────────────────
 def recall_k(ret_ids, gold_ids, k):
@@ -217,35 +226,22 @@ if __name__ == "__main__":
     bm25   = build_bm25(chunks)
     print("BM25 hazır.", flush=True)
 
-    # Dense — sadece mevcut cache varsa kullan (ST yükleme çok yavaş)
+    # Dense — OAI cache veya balanced cache varsa aktif et
     dense_available = False
     faiss_index = None
     faiss_ids   = None
-    cache_vec   = OUT_DIR / "faiss_vectors_balanced.npy"
-    if cache_vec.exists():
-        try:
-            faiss_ids = np.load(str(OUT_DIR / "faiss_chunk_ids_balanced.npy"))
-            vecs = np.load(str(cache_vec)).astype("float32")
-            norms = np.linalg.norm(vecs, axis=1, keepdims=True)
-            vecs  = vecs / np.maximum(norms, 1e-9)
-            import faiss
-            faiss_index = faiss.IndexFlatIP(vecs.shape[1])
-            faiss_index.add(vecs)
-            dense_available = True
-            print("FAISS cache yüklendi — dense pipeline aktif.", flush=True)
-        except Exception as e:
-            print(f"FAISS yüklenemedi: {e} — dense atlanacak.", flush=True)
+    oai_cache_vec = OUT_DIR / "faiss_vectors_oai.npy"
+    oai_cache_ids = OUT_DIR / "faiss_chunk_ids_oai.npy"
+    balanced_cache_vec = OUT_DIR / "faiss_vectors_balanced.npy"
+    if oai_cache_vec.exists() or balanced_cache_vec.exists():
+        dense_available = True
+        print("FAISS cache mevcut — dense+hybrid pipeline aktif.", flush=True)
     else:
-        print("FAISS cache yok — dense ve hybrid atlanacak (BM25+multiquery çalışacak).", flush=True)
+        print("FAISS cache yok — önce OAI embedding ile index oluşturulacak.", flush=True)
+        dense_available = True  # build_dense içinde oluşturulacak
 
-    # Pipelines — dense/hybrid için OpenAI embedding kullanıyoruz (ST yerine)
-    # OpenAI text-embedding-3-small: 384 boyutlu değil, 1536 boyutlu
-    # Mevcut FAISS index 384 boyutlu — dense için ST gerekiyor ama yavaş
-    # Çözüm: FAISS'i REBUILD et (OpenAI embedding ile)
-    PIPELINES = ["no-rag", "bm25", "multiquery"]
-    if dense_available:
-        # Dense için OpenAI embedding ile query encode et
-        PIPELINES += ["dense", "hybrid"]
+    # 5 pipeline her zaman aktif
+    PIPELINES = ["no-rag", "bm25", "dense", "hybrid", "multiquery"]
     print(f"Pipelines: {PIPELINES}", flush=True)
 
     # Query encoder: dense için OpenAI text-embedding-3-small
@@ -258,48 +254,55 @@ if __name__ == "__main__":
         )
         return np.array(resp.data[0].embedding, dtype="float32")
 
-    st_model = None  # ST yerine encode_query_openai kullanılacak
-    if dense_available:
-        # FAISS vektörleri de aynı model ile encode edilmiş mi kontrol et
-        # Eski vektörler MiniLM ile, yenisi OpenAI ile — rebuild gerekiyor
-        oai_cache_vec = OUT_DIR / "faiss_vectors_oai.npy"
-        oai_cache_ids = OUT_DIR / "faiss_chunk_ids_oai.npy"
-        if not oai_cache_vec.exists():
-            print("OpenAI embedding ile FAISS index oluşturuluyor...", flush=True)
-            texts = [c["text"] for c in chunks]
-            batch_size = 100
-            all_vecs = []
-            for b in range(0, len(texts), batch_size):
-                batch = texts[b:b+batch_size]
-                resp = client.embeddings.create(
-                    model="text-embedding-3-small",
-                    input=batch,
-                    dimensions=384
-                )
-                batch_vecs = [np.array(d.embedding, dtype="float32") for d in resp.data]
-                all_vecs.extend(batch_vecs)
-                print(f"  {min(b+batch_size, len(texts))}/{len(texts)} encode edildi", flush=True)
-            oai_vecs = np.array(all_vecs, dtype="float32")
-            oai_ids  = np.array([c["id"] for c in chunks])
-            np.save(str(oai_cache_vec), oai_vecs)
-            np.save(str(oai_cache_ids), oai_ids)
-            print(f"  FAISS OpenAI cache kaydedildi.", flush=True)
-        else:
-            print("OpenAI FAISS cache yüklendi.", flush=True)
-            oai_vecs = np.load(str(oai_cache_vec)).astype("float32")
-            oai_ids  = np.load(str(oai_cache_ids))
+    # OpenAI FAISS index kur (cache varsa yükle, yoksa oluştur)
+    if not oai_cache_vec.exists():
+        print("OpenAI embedding ile FAISS index oluşturuluyor...", flush=True)
+        texts = [c["text"] for c in chunks]
+        batch_size = 100
+        all_vecs = []
+        for b in range(0, len(texts), batch_size):
+            batch = texts[b:b+batch_size]
+            resp = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch,
+                dimensions=384
+            )
+            batch_vecs = [np.array(d.embedding, dtype="float32") for d in resp.data]
+            all_vecs.extend(batch_vecs)
+            print(f"  {min(b+batch_size, len(texts))}/{len(texts)} encode edildi", flush=True)
+        oai_vecs = np.array(all_vecs, dtype="float32")
+        oai_ids  = np.array([c["id"] for c in chunks])
+        np.save(str(oai_cache_vec), oai_vecs)
+        np.save(str(oai_cache_ids), oai_ids)
+        print(f"  FAISS OpenAI cache kaydedildi.", flush=True)
+    else:
+        print("OpenAI FAISS cache yüklendi.", flush=True)
+        oai_vecs = np.load(str(oai_cache_vec)).astype("float32")
+        oai_ids  = np.load(str(oai_cache_ids))
 
-        # L2 normalize
-        norms = np.linalg.norm(oai_vecs, axis=1, keepdims=True)
-        oai_vecs = oai_vecs / np.maximum(norms, 1e-9)
-        import faiss as faiss_lib
-        oai_index = faiss_lib.IndexFlatIP(oai_vecs.shape[1])
-        oai_index.add(oai_vecs)
-        faiss_index = oai_index
-        faiss_ids   = oai_ids
-        print(f"OpenAI FAISS index hazır ({len(oai_vecs)} vektör, dim=384)", flush=True)
+    # L2 normalize & index kur
+    norms = np.linalg.norm(oai_vecs, axis=1, keepdims=True)
+    oai_vecs = oai_vecs / np.maximum(norms, 1e-9)
+    import faiss as faiss_lib
+    oai_index = faiss_lib.IndexFlatIP(oai_vecs.shape[1])
+    oai_index.add(oai_vecs)
+    faiss_index = oai_index
+    faiss_ids   = oai_ids
+    print(f"OpenAI FAISS index hazır ({len(oai_vecs)} vektör, dim=384)", flush=True)
 
     all_records = []
+    detail_path  = OUT_DIR / "benchmark_balanced_detail.csv"
+    # Önceki yarım çalışma varsa yükle (resume)
+    done_keys = set()
+    if detail_path.exists():
+        try:
+            prev = pd.read_csv(detail_path)
+            for _, r in prev.iterrows():
+                done_keys.add((r["pipeline"], r["model"], r["case_id"]))
+            all_records = prev.to_dict("records")
+            print(f"  ♻️  Önceki çalışmadan {len(all_records)} kayıt yüklendi.", flush=True)
+        except Exception:
+            pass
 
     for model in MODELS:
         for pipeline in PIPELINES:
@@ -311,40 +314,53 @@ if __name__ == "__main__":
                 cid   = tc["case_id"]
                 gold  = tc["gold_label"]
                 gold_chunk_ids = [int(x) for x in (tc.get("gold_chunk_ids") or [])]
+
+                # Resume: zaten işlendiyse atla
+                if (pipeline, model, cid) in done_keys:
+                    print(f"  [{i:02d}/{len(cases)}] {cid} ... (atlandı)", flush=True)
+                    continue
+
                 print(f"  [{i:02d}/{len(cases)}] {cid} ...", end="", flush=True)
 
                 # Retrieve
                 retrieved = []
-                if pipeline == "no-rag":
-                    retrieved = []
-                elif pipeline == "bm25":
-                    retrieved = bm25_retrieve(bm25, chunks, tc["query"], TOP_K)
-                elif pipeline == "multiquery":
-                    retrieved = multiquery_retrieve(bm25, chunks, tc["query"], TOP_K, model)
-                elif pipeline == "dense" and dense_available:
-                    qv = encode_query_openai(tc["query"])
-                    retrieved = dense_retrieve(faiss_index, faiss_ids, chunks, qv, TOP_K)
-                elif pipeline == "hybrid" and dense_available:
-                    bm_res = bm25_retrieve(bm25, chunks, tc["query"], TOP_K*2)
-                    qv     = encode_query_openai(tc["query"])
-                    dn_res = dense_retrieve(faiss_index, faiss_ids, chunks, qv, TOP_K*2)
-                    bm_map = {r["id"]: r["score"] for r in bm_res}
-                    dn_map = {r["id"]: r["score"] for r in dn_res}
-                    all_ids = set(bm_map) | set(dn_map)
-                    scored  = sorted(all_ids,
-                                     key=lambda x: 0.5*bm_map.get(x,0)+0.5*dn_map.get(x,0),
-                                     reverse=True)
-                    retrieved = [{"id":x,"score":0.5*bm_map.get(x,0)+0.5*dn_map.get(x,0),
-                                  "text":chunks[x]["text"]} for x in scored[:TOP_K]]
+                try:
+                    if pipeline == "no-rag":
+                        retrieved = []
+                    elif pipeline == "bm25":
+                        retrieved = bm25_retrieve(bm25, chunks, tc["query"], TOP_K)
+                    elif pipeline == "multiquery":
+                        retrieved = multiquery_retrieve(bm25, chunks, tc["query"], TOP_K, model)
+                    elif pipeline == "dense" and dense_available:
+                        qv = encode_query_openai(tc["query"])
+                        retrieved = dense_retrieve(faiss_index, faiss_ids, chunks, qv, TOP_K)
+                    elif pipeline == "hybrid" and dense_available:
+                        bm_res = bm25_retrieve(bm25, chunks, tc["query"], TOP_K*2)
+                        qv     = encode_query_openai(tc["query"])
+                        dn_res = dense_retrieve(faiss_index, faiss_ids, chunks, qv, TOP_K*2)
+                        bm_map = {r["id"]: r["score"] for r in bm_res}
+                        dn_map = {r["id"]: r["score"] for r in dn_res}
+                        all_ids = set(bm_map) | set(dn_map)
+                        scored  = sorted(all_ids,
+                                         key=lambda x: 0.5*bm_map.get(x,0)+0.5*dn_map.get(x,0),
+                                         reverse=True)
+                        retrieved = [{"id":x,"score":0.5*bm_map.get(x,0)+0.5*dn_map.get(x,0),
+                                      "text":chunks[x]["text"]} for x in scored[:TOP_K]]
 
-                # Evaluate
-                ans = llm_eval(tc["process_text"], tc["query"], retrieved, model)
+                    # Evaluate
+                    ans = llm_eval(tc["process_text"], tc["query"], retrieved, model)
+                except openai.RateLimitError as e:
+                    print(f"\n  ❌ Kota bitti: {e}", flush=True)
+                    print("  💾 Şimdiye kadar tamamlananlar kaydedildi — kredi ekleyip tekrar çalıştırın.", flush=True)
+                    pd.DataFrame(all_records).to_csv(detail_path, index=False)
+                    raise
+
                 ret_ids = [r["id"] for r in retrieved]
                 correct = (ans.get("label") == gold)
                 ok = "✓" if correct else "✗"
                 print(f" {ans.get('label')} (gold:{gold}) {ok}", flush=True)
 
-                all_records.append({
+                record = {
                     "pipeline":    pipeline,
                     "model":       model,
                     "case_id":     cid,
@@ -357,9 +373,14 @@ if __name__ == "__main__":
                     "latency":     ans.get("latency",0),
                     "cost_usd":    ans.get("cost_usd",0),
                     "n_retrieved": len(retrieved),
-                })
+                }
+                all_records.append(record)
+                done_keys.add((pipeline, model, cid))
 
-    # Kaydet
+                # Incremental save — her kayıt sonrası yaz
+                pd.DataFrame(all_records).to_csv(detail_path, index=False)
+
+    # Final kaydet
     df = pd.DataFrame(all_records)
     detail_path = OUT_DIR / "benchmark_balanced_detail.csv"
     df.to_csv(detail_path, index=False)

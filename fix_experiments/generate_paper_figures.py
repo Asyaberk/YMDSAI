@@ -31,7 +31,7 @@ from pathlib import Path
 # ── Paths ──────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).parent.parent
 OUTPUT_DIR  = BASE_DIR / "experiment_outputs"
-FIGURES_DIR = BASE_DIR / "paper" / "figures"
+FIGURES_DIR = OUTPUT_DIR / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Style ──────────────────────────────────────────────────────────────────
@@ -73,11 +73,10 @@ MODEL_MARKS = {"gpt-4o-mini": "o", "gpt-4o": "s"}
 MODEL_COLORS= {"gpt-4o-mini": BLUE, "gpt-4o": ORANGE}
 
 def save(fig, name):
-    """PNG ve PDF olarak kaydet."""
-    for ext in ("png", "pdf"):
-        p = FIGURES_DIR / f"{name}.{ext}"
-        fig.savefig(str(p), dpi=DPI, bbox_inches="tight", pad_inches=0.08)
-        print(f"  ✅ {p.name}")
+    """Sadece PNG olarak kaydet."""
+    p = FIGURES_DIR / f"{name}.png"
+    fig.savefig(str(p), dpi=DPI, bbox_inches="tight", pad_inches=0.08)
+    print(f"  ✅ {p.name}")
     plt.close(fig)
 
 def load_balanced_summary():

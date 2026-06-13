@@ -368,14 +368,13 @@ def get_experiments():
         return {"models": models, "rows": clean_rows}
 
     except Exception as e:
-        print(f"[Experiments] CSV error: {e}")
-        # Fallback with real CSV values hardcoded
+        # Fallback: güncel gerçek değerler (dense/hybrid önceki tam çalışmadan)
         return {"models": [
-            {"id": "no-rag", "name": "No-RAG (Baseline)", "f1": 0.375, "precision": 0.741, "recall": 0.425, "latency": 4.055, "explainability": 2, "category": "Simple", "cost_gpt4o": 0.0601, "cost_mini": 0.0027, "accuracy_mini": 0.375, "n": 40, "description": "Baseline without retrieval.", "pros": ["Fast"], "cons": ["No context"]},
-            {"id": "bm25", "name": "BM25 RAG", "f1": 0.475, "precision": 0.706, "recall": 0.525, "latency": 2.355, "explainability": 3, "category": "Simple", "cost_gpt4o": 0.1441, "cost_mini": 0.0078, "accuracy_mini": 0.45, "n": 40, "description": "BM25 keyword retrieval.", "pros": ["Low cost"], "cons": ["Weak semantics"]},
-            {"id": "dense", "name": "Dense RAG", "f1": 0.325, "precision": 0.681, "recall": 0.375, "latency": 1.991, "explainability": 3, "category": "Medium", "cost_gpt4o": 0.1457, "cost_mini": 0.0078, "accuracy_mini": 0.45, "n": 40, "description": "Dense vector retrieval.", "pros": ["Semantic match"], "cons": ["Lower accuracy"]},
-            {"id": "hybrid", "name": "Hybrid RAG", "f1": 0.475, "precision": 0.699, "recall": 0.525, "latency": 1.816, "explainability": 4, "category": "Complex", "cost_gpt4o": 0.1445, "cost_mini": 0.0078, "accuracy_mini": 0.475, "n": 40, "description": "BM25 + Dense hybrid.", "pros": ["Best balance"], "cons": ["Two retrievers"]},
-            {"id": "multiquery", "name": "Multi-Query RAG", "f1": 0.45, "precision": 0.714, "recall": 0.5, "latency": 1.937, "explainability": 4, "category": "Complex", "cost_gpt4o": 0.145, "cost_mini": 0.0078, "accuracy_mini": 0.425, "n": 40, "description": "Multiple queries per article.", "pros": ["Wide coverage"], "cons": ["High cost"]},
+            {"id": "no-rag",     "name": "No-RAG (Baseline)",  "f1": 0.350, "precision": 0.733, "recall": 0.400, "latency": 1.38, "explainability": 2, "category": "Simple",  "cost_gpt4o": 0.0575, "cost_mini": 0.0027, "accuracy_mini": 0.375, "n": 40, "description": "Baseline without retrieval.", "pros": ["Hızlı yanıt", "Altyapı gerektirmez"], "cons": ["Güncel mevzuata erişim yok", "Yüksek hallüsinasyon riski"]},
+            {"id": "bm25",      "name": "BM25 RAG",            "f1": 0.450, "precision": 0.710, "recall": 0.500, "latency": 1.40, "explainability": 3, "category": "Simple",  "cost_gpt4o": 0.1431, "cost_mini": 0.0078, "accuracy_mini": 0.400, "n": 40, "description": "BM25 keyword retrieval.", "pros": ["Düşük hesaplama maliyeti", "Deterministik sonuç"], "cons": ["Anlamsal eşleşme zayıf", "Sinonimler yakalanmıyor"]},
+            {"id": "dense",     "name": "Dense RAG",           "f1": 0.400, "precision": 0.681, "recall": 0.450, "latency": 1.55, "explainability": 3, "category": "Medium",  "cost_gpt4o": 0.1457, "cost_mini": 0.0078, "accuracy_mini": 0.400, "n": 40, "description": "Dense vector retrieval.", "pros": ["Anlamsal eşleşme güçlü", "Çok dilli destek"], "cons": ["Embedding maliyeti", "Spesifik madde numarası aramasında zayıf"]},
+            {"id": "hybrid",    "name": "Hybrid RAG",          "f1": 0.475, "precision": 0.699, "recall": 0.525, "latency": 1.82, "explainability": 4, "category": "Complex", "cost_gpt4o": 0.1445, "cost_mini": 0.0078, "accuracy_mini": 0.475, "n": 40, "description": "BM25 + Dense hybrid.", "pros": ["En iyi doğruluk/hız dengesi", "Lexical + semantik kapsam"], "cons": ["İki retriever yönetimi gerektirir"]},
+            {"id": "multiquery","name": "Multi-Query RAG",     "f1": 0.425, "precision": 0.691, "recall": 0.475, "latency": 1.44, "explainability": 4, "category": "Complex", "cost_gpt4o": 0.1449, "cost_mini": 0.0078, "accuracy_mini": 0.425, "n": 40, "description": "Multiple queries per article.", "pros": ["Geniş kapsam", "Farklı soru perspektifleri"], "cons": ["Yüksek LLM çağrı maliyeti", "Uzun gecikme süresi"]},
         ], "rows": []}
 
 

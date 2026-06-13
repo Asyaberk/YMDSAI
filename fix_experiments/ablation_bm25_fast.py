@@ -457,12 +457,12 @@ if __name__ == "__main__":
     # ── Figürleri güncelle ────────────────────────────────────────────────
     print("\n📊 Figürler güncelleniyor...", flush=True)
     try:
-        import subprocess
+        import sys, subprocess
         result = subprocess.run(
-            ["/Users/asyaberk/Desktop/SeniorDesignExperiments/.venv/bin/python3.14",
+            [sys.executable,
              "fix_experiments/generate_paper_figures.py"],
             capture_output=True, text=True,
-            cwd="/Users/asyaberk/Desktop/SeniorDesignExperiments"
+            cwd=str(BASE_DIR)
         )
         if result.returncode == 0:
             print("  ✅ Figürler güncellendi: paper/figures/", flush=True)
